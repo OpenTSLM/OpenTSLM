@@ -24,7 +24,7 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
         num_layers: int = 6,
         patch_size: int = PATCH_SIZE,
         ff_dim: int = 2048,
-        max_patches: int = 2600,
+        max_patches: int = 1024,
     ):
         """
         Args:

@@ -19,3 +19,4 @@ einops-exts
 pyvim
 openai
 wfdb
+hf_transfer
