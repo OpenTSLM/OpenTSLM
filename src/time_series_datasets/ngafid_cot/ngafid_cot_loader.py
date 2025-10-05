@@ -19,7 +19,7 @@ from urllib.error import URLError, HTTPError
 from time_series_datasets.constants import RAW_DATA
 
 
-NGAFID_COT_DIR = os.path.join(RAW_DATA, "ngafid", "ngafid_cot")
+NGAFID_COT_DIR = os.path.join(RAW_DATA, "ngafid")
 NGAFID_COT_ZIP_PATH = os.path.join(RAW_DATA, "ngafid", "ngafid_cot.zip")
 NGAFID_COT_URL = "https://polybox.ethz.ch/index.php/s/qLDZx4BiN2JPja5"
 NGAFID_COT_DIRECT_ZIP = "https://polybox.ethz.ch/index.php/s/qLDZx4BiN2JPja5/download/ngafid_cot.zip"
