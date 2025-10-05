@@ -271,13 +271,14 @@ def _find_default_files() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], L
         
         # Calculate split sizes for this label
         n_total = len(group_records)
-        n_train = int(0.8 * n_total)
+        n_train = int(0.9 * n_total)
         n_val = int(0.1 * n_total)
         
         # Split indices
         train_indices = group_indices[:n_train]
         val_indices = group_indices[n_train:n_train + n_val]
-        test_indices = group_indices[n_train + n_val:]
+        # test_indices = val_indices (same as validation)
+        test_indices = val_indices
         
         # Add to splits
         train.extend([group_records[i] for i in train_indices])
