@@ -20,6 +20,7 @@ from time_series_datasets.m4.M4QADataset import M4QADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from time_series_datasets.ngafid_cot.NGAFIDCoTQADataset import NGAFIDCoTQADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -69,6 +70,7 @@ CURRICULUM_STAGES = [
     "stage3_cot",
     "stage4_sleep_cot",
     "stage5_ecg_cot",
+    "stage6_ngafid_cot",
 ]
 
 
@@ -84,6 +86,7 @@ class CurriculumTrainer:
     - stage3_cot: Trains the model on a chain-of-thought reasoning dataset (HAR CoT)
     - stage4_sleep_cot: Trains the model on sleep stage classification with chain-of-thought reasoning
     - stage5_ecg_cot: Trains the model on ECG QA with chain-of-thought reasoning
+    - stage6_ngafid_cot: Trains the model on predictive maintenance reasoning (NGAFID CoT)
 
     Features:
     - Automatic loss history tracking saved to loss_history.txt in each stage's checkpoints directory
@@ -1418,6 +1421,32 @@ class CurriculumTrainer:
             sampler=sampler,
         )
 
+    def stage6_ngafid_cot(
+        self, batch_size: int = None, eval_only: bool = False
+    ) -> Dict[str, Any]:
+        """Stage 6: Predictive Maintenance Reasoning (NGAFID CoT).
+
+        Configuration:
+        - Epochs: 60
+        - OpenTSLMSP: encoder_lr=2e-4, projector_lr=1e-4
+        - OpenTSLMFlamingo: base_lr=2e-4
+        - Metric: Test loss only (predictive maintenance reasoning)
+        """
+        sampler = None
+
+        return self._train_stage(
+            stage_name="stage6_ngafid_cot",
+            dataset_class=NGAFIDCoTQADataset,
+            num_epochs=60,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
+            metric_func=None,  # Only test loss for predictive maintenance reasoning
+            batch_size=batch_size,
+            eval_only=eval_only,
+            sampler=sampler,
+        )
+
     def run_curriculum(
         self, stages: List[str] = None, batch_size: int = None, eval_only: bool = False
     ):
@@ -1481,6 +1510,12 @@ class CurriculumTrainer:
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage5_ecg_cot":
                 stage_results = self.stage5_ecg_cot(
+                    batch_size=batch_size, eval_only=eval_only
+                )
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage6_ngafid_cot":
+                stage_results = self.stage6_ngafid_cot(
                     batch_size=batch_size, eval_only=eval_only
                 )
                 results[stage] = stage_results
@@ -1616,7 +1651,7 @@ class CurriculumTrainer:
         model = self._get_model()
 
         # Enable LoRA for stages after stage2_captioning
-        stages_with_lora = ["stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot"]
+        stages_with_lora = ["stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot", "stage6_ngafid_cot"]
 
         if stage_name in stages_with_lora:
             if not getattr(model, "lora_enabled", False):
@@ -1651,7 +1686,7 @@ class CurriculumTrainer:
         model = self._get_model()
 
         # Enable LoRA for stages after stage2_captioning
-        stages_with_lora = ["stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot"]
+        stages_with_lora = ["stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot", "stage6_ngafid_cot"]
 
         if stage_name in stages_with_lora:
             if not getattr(model, "lora_enabled", False):
