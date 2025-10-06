@@ -1462,7 +1462,7 @@ class CurriculumTrainer:
         return self._train_stage(
             stage_name="stage6_ngafid_cot",
             dataset_class=NGAFIDCoTQADataset,
-            num_epochs=60,
+            num_epochs=30,
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,
@@ -1488,7 +1488,7 @@ class CurriculumTrainer:
         return self._train_stage(
             stage_name="stage7_fault_detection_cot",
             dataset_class=FaultDetectionCoTQADataset,
-            num_epochs=40,
+            num_epochs=30,
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,
