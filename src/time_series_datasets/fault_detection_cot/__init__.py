@@ -1,16 +1,12 @@
-#
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
-#
 # SPDX-License-Identifier: MIT
-#
-from .fault_detection_cot import (
-    load_fault_detection_cot_splits,
-    FaultDetectionCoTQADataset,
-)
+
+from .fault_detection_cot_loader import load_fault_detection_cot_splits
+from .FaultDetectionCoTQADataset import FaultDetectionCoTQADataset
 
 __all__ = [
     "load_fault_detection_cot_splits",
     "FaultDetectionCoTQADataset",
 ]
+
+

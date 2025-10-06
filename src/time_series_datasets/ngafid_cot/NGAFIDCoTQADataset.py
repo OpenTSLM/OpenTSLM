@@ -127,6 +127,16 @@ Provide your analysis in the three structured sections as described above.
         sample["y_failure_within_2d"] = row.get("y_failure_within_2d")
         sample["y_part_category"] = row.get("y_part_category")
         sample["target_class_raw"] = row.get("target_class_raw")
+        # Surface required stable identifiers for downstream matching and logging
+        try:
+            sample["sample_id"] = row["sample_id"]
+            sample["unique_sample_id"] = row["unique_sample_id"]
+            sample["flight_id_before"] = row["flight_id_before"]
+            sample["flight_id_after"] = row["flight_id_after"]
+        except KeyError as missing_key:
+            raise KeyError(
+                f"Missing required NGAFID identifier field '{missing_key.args[0]}' in sample."
+            )
         return sample
 
 

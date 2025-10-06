@@ -21,6 +21,7 @@ from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 from time_series_datasets.ngafid_cot.NGAFIDCoTQADataset import NGAFIDCoTQADataset
+from time_series_datasets.fault_detection_cot.FaultDetectionCoTQADataset import FaultDetectionCoTQADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -71,6 +72,7 @@ CURRICULUM_STAGES = [
     "stage4_sleep_cot",
     "stage5_ecg_cot",
     "stage6_ngafid_cot",
+    "stage7_fault_detection_cot",
 ]
 
 
@@ -772,6 +774,14 @@ class CurriculumTrainer:
                             "gold": sample["answer"],
                         }
 
+                        # Attach stable identifiers when available so downstream tools can match
+                        if "sample_id" in sample and sample["sample_id"] is not None:
+                            result["sample_id"] = sample["sample_id"]
+                        if "unique_sample_id" in sample and sample["unique_sample_id"] is not None:
+                            result["unique_sample_id"] = sample["unique_sample_id"]
+                        if "flight_id_before" in sample and sample["flight_id_before"] is not None:
+                            result["flight_id_before"] = sample["flight_id_before"]
+
                         # Add time series ID for stage2 captioning
                         if stage == "stage2_captioning" and "id" in sample:
                             result["time_series_id"] = sample["id"]
@@ -784,6 +794,21 @@ class CurriculumTrainer:
                                 result["ecg_id"] = sample["ecg_id"]
                             if "correct_answer" in sample:
                                 result["correct_answer"] = sample["correct_answer"]
+
+                        # Attach identifiers for fault detection mapping
+                        if stage == "stage7_fault_detection_cot":
+                            if "sample_id" in sample and sample["sample_id"] is not None:
+                                result["sample_id"] = sample["sample_id"]
+                            if "question" in sample:
+                                result["question"] = sample["question"]
+                            if "answer_label" in sample:
+                                result["answer_label"] = sample["answer_label"]
+                            if "numeric_label" in sample:
+                                result["numeric_label"] = sample["numeric_label"]
+                            if "template_id" in sample:
+                                result["template_id"] = sample["template_id"]
+                            if "fault_description" in sample:
+                                result["fault_description"] = sample["fault_description"]
 
                         results.append(result)
                         # Stream write each result immediately to per-rank file
@@ -1447,6 +1472,32 @@ class CurriculumTrainer:
             sampler=sampler,
         )
 
+    def stage7_fault_detection_cot(
+        self, batch_size: int = None, eval_only: bool = False
+    ) -> Dict[str, Any]:
+        """Stage 7: Chain-of-Thought Reasoning (Fault Detection CoT).
+
+        Configuration:
+        - Epochs: 40
+        - OpenTSLMSP: encoder_lr=2e-4, projector_lr=1e-4
+        - OpenTSLMFlamingo: base_lr=2e-4
+        - Metric: Test loss only (chain-of-thought reasoning)
+        """
+        sampler = None
+
+        return self._train_stage(
+            stage_name="stage7_fault_detection_cot",
+            dataset_class=FaultDetectionCoTQADataset,
+            num_epochs=40,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
+            metric_func=None,
+            batch_size=batch_size,
+            eval_only=eval_only,
+            sampler=sampler,
+        )
+
     def run_curriculum(
         self, stages: List[str] = None, batch_size: int = None, eval_only: bool = False
     ):
@@ -1516,6 +1567,12 @@ class CurriculumTrainer:
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage6_ngafid_cot":
                 stage_results = self.stage6_ngafid_cot(
+                    batch_size=batch_size, eval_only=eval_only
+                )
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage7_fault_detection_cot":
+                stage_results = self.stage7_fault_detection_cot(
                     batch_size=batch_size, eval_only=eval_only
                 )
                 results[stage] = stage_results
