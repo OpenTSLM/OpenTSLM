@@ -30,12 +30,14 @@ class FaultDetectionCoTQADataset(QADataset):
         return load_fault_detection_cot_splits()
 
     def _get_answer(self, row) -> str:
-        # Prefer rationale if present; otherwise fall back to answer label
+        # Require a non-empty rationale so the model learns to predict full reasoning
         rationale = row.get("rationale")
-        if isinstance(rationale, str) and len(rationale.strip()) > 0:
-            return rationale
-        ans = row.get("answer")
-        return str(ans) if ans is not None else ""
+        if not isinstance(rationale, str) or len(rationale.strip()) == 0:
+            sid = row.get("sample_id", "unknown")
+            raise ValueError(
+                f"FaultDetectionCoTQADataset: missing or empty 'rationale' for sample_id={sid}"
+            )
+        return rationale
 
     def _get_pre_prompt(self, row) -> str:
         # Build the desired instructional prompt using row fields
