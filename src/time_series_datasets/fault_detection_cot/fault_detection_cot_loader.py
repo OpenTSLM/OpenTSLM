@@ -129,6 +129,13 @@ def load_fault_detection_cot_splits() -> Tuple[Dataset, Dataset, Dataset]:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Missing split CSV: {path}")
         df = pd.read_csv(path)
+        before = len(df)
+        # Keep only rows with non-empty rationale
+        mask = (~df["rationale"].isna()) & (df["rationale"].astype(str).str.strip() != "")
+        df = df.loc[mask].reset_index(drop=True)
+        dropped = before - len(df)
+        if dropped > 0:
+            print(f"FaultDetectionCoT: dropped {dropped} samples without rationale from split '{name}' (kept {len(df)} of {before}).")
         return Dataset.from_pandas(df)
 
     train = load_csv("train")
