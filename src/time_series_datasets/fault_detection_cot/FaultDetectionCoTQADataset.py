@@ -57,23 +57,28 @@ class FaultDetectionCoTQADataset(QADataset):
 
         options = parse_options_from_prompt(row.get("prompt"))
         if not options:
-            # Fallback: use common bearing condition labels if not present
-            # This keeps formatting stable even if the CSV lacks options in prompt
             options = [o for o in ["undamaged", "inner_damaged", "outer_damaged"]]
 
         options_block = "\n".join(f"- {opt}" for opt in options)
 
         text = (
             "You are presented with motor current signals from an electromechanical drive system used to monitor the condition of rolling bearings and detect damages. "
+            "This time series represents motor current measurements collected over a duration of 0.08 seconds (80 milliseconds), sampled at 64 kHz. "
+            "The data has been segmented into 5120-point windows using a sliding window technique, preserving the original sampling rate while creating focused segments for analysis. \n\n\n"
+            f"Bearing condition: {fault_description}  \n"
+            f"Question: {question}  \n\n"
             "Possible answers:  \n"
             f"{options_block}  \n\n"
-            
             "Your task is to analyze the motor current signal and determine the correct answer.\n\n"
             "Instructions:\n"
             "- Begin with a logical sequence of reasoning, see what you can observe in the signals, and then link them to the physical interpration of how the bearing fault modulates the load on the motor. Reason step by step, from the signals to the final answer, never mention the answer in the beginning!\n"
             "- NEVER mention, imply or indicate the answer in the beginning, begin with a step by step reasoning, from the signals!\n"
+            "- Write your reasoning as a single coherent paragraph without lists, bullet points or section headers.\n"
             "- Base your reasoning on signal characteristics such as amplitude modulation, frequency components, harmonic sidebands, and anomalies associated with bearing faults in Motor Current Signature Analysis (MCSA).  \n"
             "- Explicitly link signal patterns to the physical mechanism mechanism of how the bearing fault modulates the load on the motor.  \n"
+            "- Do not reference \"plots\" or \"visual inspection\"; only describe the inferred patterns.  \n"
+            "- You are NOT allowed to mention or hint at any specific answer option, class name, or damage type until the very final sentence.  \n"
+            "- Never express uncertainty. Always give deterministic reasoning.  \n"
             "- Your last sentence should include a quick summary indicating the answer, your last output should be \"Answer:"
         )
         return text
@@ -82,12 +87,23 @@ class FaultDetectionCoTQADataset(QADataset):
         return "Rationale:"
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
-        # The CSV does not include raw series; we construct a synthetic description placeholder.
-        # For model compatibility, provide a minimal numeric series to attach with descriptive text.
-        description = row.get("fault_description") or "Motor current signal segment for bearing condition assessment."
-        # Provide a tiny placeholder numeric series so downstream formatting remains consistent
-        series = np.asarray([0.0, 0.0, 0.0], dtype=float)
-        return [TextTimeSeriesPrompt(description, series)]
+        # Use real time series from loader
+        ts = row.get("time_series")
+        if ts is None:
+            raise ValueError(
+                f"FaultDetectionCoTQADataset: missing 'time_series' for sample_id={row.get('sample_id','unknown')}"
+            )
+        series = np.asarray(ts, dtype=float)
+        series = np.nan_to_num(series, nan=0.0, posinf=0.0, neginf=0.0)
+        # z-normalize per-sample for stability
+        mean = float(series.mean())
+        std = float(series.std())
+        std = std if std > 1e-8 else 1e-8
+        series_norm = (series - mean) / std
+        description = (
+            f"Motor current signal segment (length {len(series)}, mean {mean:.4f}, std {std:.4f})."
+        )
+        return [TextTimeSeriesPrompt(description, series_norm.tolist())]
 
     def _format_sample(self, row):
         sample = super()._format_sample(row)
@@ -101,7 +117,8 @@ class FaultDetectionCoTQADataset(QADataset):
         for key_src, key_dst in [
             ("question", "question"),
             ("answer", "answer_label"),  # string label
-            ("label", "numeric_label"),  # numeric label
+            ("label", "numeric_label"),  # numeric label (from CoT CSV)
+            ("label_verified", "label_verified"),  # numeric label from raw TS
             ("template_id", "template_id"),
             ("fault_description", "fault_description"),
         ]:

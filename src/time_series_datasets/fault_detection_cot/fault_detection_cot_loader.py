@@ -7,12 +7,13 @@ import os
 import zipfile
 import shutil
 import tempfile
-from typing import Tuple
+from typing import Tuple, Dict, List, Any
 
 import pandas as pd
 from datasets import Dataset
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
+import ssl
 
 # Use project data root
 from time_series_datasets.constants import RAW_DATA
@@ -22,6 +23,14 @@ FD_COT_DIR = os.path.join(RAW_DATA, "fault_detection")
 FD_COT_ZIP_PATH = os.path.join(FD_COT_DIR, "fault_detecation_a.zip")  # archive name spelling per source
 FD_COT_URL = "https://polybox.ethz.ch/index.php/s/xjx5kBLaBkesfzT"
 FD_COT_DIRECT = FD_COT_URL.rstrip("/") + "/download"
+
+# FaultDetectionA raw time series (TS format) from UEA/Timeseries Classification site
+FDA_DIR = os.path.join(RAW_DATA, "fault_detection_a")
+FDA_ZIP = os.path.join(FDA_DIR, "FaultDetectionA.zip")
+FDA_TRAIN_TS = os.path.join(FDA_DIR, "FaultDetectionA_TRAIN.ts")
+FDA_TEST_TS = os.path.join(FDA_DIR, "FaultDetectionA_TEST.ts")
+FDA_VAL_TS = os.path.join(FDA_DIR, "val.ts")  # synthetic split from tail of TRAIN
+FDA_URL = "https://www.timeseriesclassification.com/aeon-toolkit/FaultDetectionA.zip"
 
 
 def _dir_has_csvs(path: str) -> bool:
@@ -69,6 +78,74 @@ def _try_download_fd_cot() -> None:
         + FD_COT_ZIP_PATH
         + "'."
     )
+
+
+# ---------------------------
+# FaultDetectionA raw TS download/parse
+# ---------------------------
+
+def _download_file_simple(url: str, target_path: str) -> None:
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    # Relaxed SSL for robustness
+    ctx = ssl.create_default_context()
+    req = Request(url, headers={"User-Agent": "OpenTSLM/1.0"})
+    with urlopen(req, context=ctx) as resp, open(target_path, "wb") as out:
+        shutil.copyfileobj(resp, out)
+
+
+def _ensure_fault_detection_a_dataset() -> None:
+    if os.path.exists(FDA_TRAIN_TS) and os.path.exists(FDA_TEST_TS):
+        return
+    os.makedirs(FDA_DIR, exist_ok=True)
+    if not os.path.exists(FDA_ZIP):
+        try:
+            _download_file_simple(FDA_URL, FDA_ZIP)
+        except Exception as e:
+            raise RuntimeError(f"Failed to download FaultDetectionA dataset: {e}")
+    try:
+        with zipfile.ZipFile(FDA_ZIP, "r") as zf:
+            zf.extractall(FDA_DIR)
+    except Exception as e:
+        raise RuntimeError(f"Failed to extract FaultDetectionA dataset: {e}")
+    if not (os.path.exists(FDA_TRAIN_TS) and os.path.exists(FDA_TEST_TS)):
+        raise FileNotFoundError(
+            f"Missing TS files after extraction in {FDA_DIR}"
+        )
+
+
+def _parse_ts_line(line: str) -> Tuple[List[float] | None, float | None]:
+    line = line.strip()
+    if not line or line.startswith("@"):
+        return None, None
+    if ":" not in line:
+        return None, None
+    values_str, label_str = line.rsplit(":", 1)
+    try:
+        series = [float(x) for x in values_str.split(",") if x]
+        label = float(label_str)
+        return series, label
+    except Exception:
+        return None, None
+
+
+def _load_fault_detection_a_ts(ts_path: str) -> pd.DataFrame:
+    rows: List[Dict[str, Any]] = []
+    with open(ts_path, "r") as f:
+        for line in f:
+            ts, lab = _parse_ts_line(line)
+            if ts is not None and lab is not None:
+                rows.append({"time_series": ts, "label": lab})
+    return pd.DataFrame(rows)
+
+
+def _load_fault_detection_a_splits() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    _ensure_fault_detection_a_dataset()
+    combined_train = _load_fault_detection_a_ts(FDA_TRAIN_TS)
+    test_df = _load_fault_detection_a_ts(FDA_TEST_TS)
+    # Per dataset description: first 8184 train, last 2728 val
+    train_df = combined_train.iloc[:8184].reset_index(drop=True)
+    val_df = combined_train.iloc[8184:].reset_index(drop=True)
+    return train_df, val_df, test_df.reset_index(drop=True)
 
 
 def _extract_zip_to_target(zip_path: str, target_dir: str) -> None:
@@ -124,23 +201,53 @@ def load_fault_detection_cot_splits() -> Tuple[Dataset, Dataset, Dataset]:
     """
     _ensure_dataset_available()
 
-    def load_csv(name: str) -> Dataset:
+    # Load raw time series splits
+    ts_train_df, ts_val_df, ts_test_df = _load_fault_detection_a_splits()
+
+    def load_and_join(name: str, ts_df: pd.DataFrame) -> Dataset:
         path = os.path.join(FD_COT_DIR, f"fault_detection_cot_{name}.csv")
         if not os.path.exists(path):
             raise FileNotFoundError(f"Missing split CSV: {path}")
         df = pd.read_csv(path)
         before = len(df)
-        # Keep only rows with non-empty rationale
+        # Filter for non-empty rationale
         mask = (~df["rationale"].isna()) & (df["rationale"].astype(str).str.strip() != "")
+        dropped = int(before - mask.sum())
         df = df.loc[mask].reset_index(drop=True)
-        dropped = before - len(df)
         if dropped > 0:
-            print(f"FaultDetectionCoT: dropped {dropped} samples without rationale from split '{name}' (kept {len(df)} of {before}).")
+            print(
+                f"FaultDetectionCoT: dropped {dropped} samples without rationale from split '{name}' (kept {len(df)} of {before})."
+            )
+
+        # sample_id corresponds to index within the split's TS dataframe
+        if "sample_id" not in df.columns:
+            raise ValueError(f"Expected 'sample_id' column in {path}")
+
+        # Attach time_series and sanity-check labels
+        time_series_list: List[List[float]] = []
+        numeric_labels: List[float] = []
+        for _, row in df.iterrows():
+            sid = int(row["sample_id"])
+            if sid < 0 or sid >= len(ts_df):
+                raise IndexError(
+                    f"sample_id {sid} out of range for split '{name}' (size {len(ts_df)})"
+                )
+            ts_row = ts_df.iloc[sid]
+            time_series_list.append(ts_row["time_series"])
+            numeric_labels.append(float(ts_row["label"]))
+
+        df = df.copy()
+        df["time_series"] = time_series_list
+        # Keep the original numeric label from CoT CSV if present, but also store verified
+        if "label" not in df.columns:
+            df["label"] = numeric_labels
+        df["label_verified"] = numeric_labels
+
         return Dataset.from_pandas(df)
 
-    train = load_csv("train")
-    val = load_csv("val")
-    test = load_csv("test")
+    train = load_and_join("train", ts_train_df)
+    val = load_and_join("val", ts_val_df)
+    test = load_and_join("test", ts_test_df)
     return train, val, test
 
 
