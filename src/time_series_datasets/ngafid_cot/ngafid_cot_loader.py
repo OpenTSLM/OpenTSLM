@@ -265,18 +265,18 @@ def _find_default_files() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], L
     rng = np.random.default_rng(42)  # Fixed seed for reproducibility
 
     for label, group_records in label_groups.items():
-        # Shuffle records for this label
-        group_indices = np.arange(len(group_records))
-        rng.shuffle(group_indices)
+        # Don't shuffle records to preserve original order for test set
+        # group_indices = np.arange(len(group_records))
+        # rng.shuffle(group_indices)
         
         # Calculate split sizes for this label
         n_total = len(group_records)
         n_train = int(0.9 * n_total)
         n_val = int(0.1 * n_total)
         
-        # Split indices
-        train_indices = group_indices[:n_train]
-        val_indices = group_indices[n_train:n_train + n_val]
+        # Split indices (use original order)
+        train_indices = list(range(n_train))
+        val_indices = list(range(n_train, n_train + n_val))
         # test_indices = val_indices (same as validation)
         test_indices = val_indices
         
@@ -288,7 +288,8 @@ def _find_default_files() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], L
     # Final shuffle within each split to avoid ordering bias
     rng.shuffle(train)
     rng.shuffle(val)
-    rng.shuffle(test)
+    # Don't shuffle test to preserve order for evaluation matching
+    # rng.shuffle(test)
 
     return train, val, test
 

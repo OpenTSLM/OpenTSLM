@@ -781,6 +781,8 @@ class CurriculumTrainer:
                             result["unique_sample_id"] = sample["unique_sample_id"]
                         if "flight_id_before" in sample and sample["flight_id_before"] is not None:
                             result["flight_id_before"] = sample["flight_id_before"]
+                        if "aircraft_context" in sample and sample["aircraft_context"]:
+                            result["aircraft_context"] = sample["aircraft_context"]
 
                         # Add time series ID for stage2 captioning
                         if stage == "stage2_captioning" and "id" in sample:
