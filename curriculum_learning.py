@@ -546,13 +546,13 @@ class CurriculumTrainer:
                         if len(unexpected_keys) > 10:
                             print(f"   ... and {len(unexpected_keys) - 10} more keys")
                 
-                # Ensure model is on the correct device after loading checkpoint
-                self.model = self.model.to(self.device)
+               
                 except Exception as e:
                     raise RuntimeError(
                         f"Failed to load model state from checkpoint for {stage}: {e}"
                     )
-
+                # Ensure model is on the correct device after loading checkpoint
+                self.model = self.model.to(self.device)
                 # Only load optimizer state when training
                 if (
                     not eval_only
