@@ -789,6 +789,8 @@ class CurriculumTrainer:
                             result["flight_id_before"] = sample["flight_id_before"]
                         if "aircraft_context" in sample and sample["aircraft_context"]:
                             result["aircraft_context"] = sample["aircraft_context"]
+                        if "target_class_raw" in sample and sample["target_class_raw"]:
+                            result["target_class_raw"] = sample["target_class_raw"]
 
                         # Add time series ID for stage2 captioning
                         if stage == "stage2_captioning" and "id" in sample:

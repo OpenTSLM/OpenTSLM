@@ -241,7 +241,8 @@ def _find_default_files() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], L
         # Fallback: gather many per-sample JSON files inside NGAFID_COT_DIR (e.g., predictive_dataset/*.json)
         multi_json: List[Dict[str, Any]] = []
         for root, _dirs, files in os.walk(NGAFID_COT_DIR):
-            for f in files:
+            # Sort files to ensure deterministic order
+            for f in sorted(files):
                 if f.endswith(".json"):
                     p = os.path.join(root, f)
                     try:
@@ -264,7 +265,7 @@ def _find_default_files() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], L
     train, val, test = [], [], []
     rng = np.random.default_rng(42)  # Fixed seed for reproducibility
 
-    for label, group_records in label_groups.items():
+    for label, group_records in sorted(label_groups.items()):
         # Don't shuffle records to preserve original order for test set
         # group_indices = np.arange(len(group_records))
         # rng.shuffle(group_indices)
