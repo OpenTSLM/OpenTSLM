@@ -159,7 +159,7 @@ class CurriculumTrainer:
         self._create_results_dir()
 
     def _get_device(self) -> str:
-        """Get the best available device."""
+        """Get the best available device. Defaults to CUDA when available."""
         if torch.cuda.is_available():
             return "cuda"
         elif torch.backends.mps.is_available():
@@ -504,6 +504,9 @@ class CurriculumTrainer:
                     if self.rank == 0:
                         print(f"❌ Failed to load LoRA state from checkpoint: {e}")
                     raise
+                
+                # Ensure model is on the correct device after loading checkpoint
+                model = model.to(self.device)
 
                 # Only load optimizer state when training
                 if (
@@ -542,6 +545,9 @@ class CurriculumTrainer:
                             print(f"   - {key}")
                         if len(unexpected_keys) > 10:
                             print(f"   ... and {len(unexpected_keys) - 10} more keys")
+                
+                # Ensure model is on the correct device after loading checkpoint
+                self.model = self.model.to(self.device)
                 except Exception as e:
                     raise RuntimeError(
                         f"Failed to load model state from checkpoint for {stage}: {e}"
@@ -1791,7 +1797,7 @@ def main():
         help="Stages to run (default: all stages)",
     )
     parser.add_argument(
-        "--device", type=str, default=None, help="Device to use (cuda, mps, cpu)"
+        "--device", type=str, default=None, help="Device to use (cuda, mps, cpu). Defaults to CUDA when available."
     )
     parser.add_argument(
         "--batch_size",
