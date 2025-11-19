@@ -6,13 +6,56 @@
 # SPDX-License-Identifier: MIT
 #
 
+import ast
+import os
 import re
 import sys
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
+
+import pandas as pd
+
+# Add src directory to path for time_series_datasets imports
+_SRC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src")
+sys.path.insert(0, _SRC_DIR)
+
+# Template answers cache - loaded from CSV on first access
+_template_answers_cache: Optional[Dict[int, List[str]]] = None
 
 
-from common_evaluator import CommonEvaluator
-from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+def _load_template_answers_cache() -> Dict[int, List[str]]:
+    """Load template answers from CSV file."""
+    global _template_answers_cache
+    if _template_answers_cache is None:
+        # Path relative to this file: ../../data/ecg_qa/ecgqa/mimic-iv-ecg/answers_for_each_template.csv
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        template_answers_path = os.path.join(
+            base_dir, "..", "..", "data", "ecg_qa", "ecgqa", "mimic-iv-ecg", "answers_for_each_template.csv"
+        )
+
+        if not os.path.exists(template_answers_path):
+            raise FileNotFoundError(
+                f"Template answers file not found at {template_answers_path}. "
+                "Please ensure the ECG-QA dataset is downloaded."
+            )
+
+        template_df = pd.read_csv(template_answers_path)
+        _template_answers_cache = {}
+        for _, row in template_df.iterrows():
+            template_id = int(row['template_id'])
+            answers_str = row['classes']
+            try:
+                _template_answers_cache[template_id] = ast.literal_eval(answers_str)
+            except Exception as e:
+                print(f"Warning: Failed to parse answers for template {template_id}: {e}")
+                _template_answers_cache[template_id] = []
+
+    return _template_answers_cache
+
+
+def get_possible_answers_for_template(template_id: int) -> List[str]:
+    """Get possible answers for a specific template ID."""
+    cache = _load_template_answers_cache()
+    return cache.get(template_id, [])
 
 
 def extract_answer(text: str) -> str:
@@ -40,7 +83,7 @@ def normalize_label(label: str) -> str:
 
 
 def evaluate_ecg_metrics(
-    ground_truth: str, prediction: str, sample: Dict[str, Any] | None = None
+    ground_truth: str, prediction: str, sample: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Evaluate ECG-QA CoT predictions using per-template answers from CSV.
@@ -68,11 +111,22 @@ def evaluate_ecg_metrics(
         print(f"DEBUG: Sample content: {sample}")
         raise ValueError("Missing 'template_id' in sample for ECG-QA evaluation")
 
-    possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(
-        int(template_id)
-    )
+    possible_answers = get_possible_answers_for_template(int(template_id))
     if not possible_answers:
-        raise ValueError(f"No possible answers found for template_id={template_id}")
+        # Template not found in answers file - return metrics indicating this
+        return {
+            "accuracy": 0,
+            "f1_score": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "prediction_normalized": pred_norm,
+            "ground_truth_normalized": gt_norm,
+            "prediction_supported": False,
+            "ground_truth_supported": False,
+            "template_id": template_id,
+            "possible_answers": [],
+            "template_missing": True,
+        }
 
     possible_answers_lower = [a.lower().strip() for a in possible_answers]
 
@@ -121,13 +175,16 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
     total_correct = 0
     total_f1_sum = 0.0
 
+    skipped_templates = []
     for template_id, points in template_groups.items():
         if not points:
             continue
 
         possible_answers = points[0].get("possible_answers", [])
         if not possible_answers:
-            raise ValueError(f"No possible answers found for template {template_id}")
+            # Template missing from answers file - skip but track for warning
+            skipped_templates.append((template_id, len(points)))
+            continue
 
         # Initialize per-class counts
         class_predictions: Dict[str, Dict[str, int]] = {}
@@ -205,6 +262,9 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
     overall_accuracy = total_correct / total_samples if total_samples > 0 else 0.0
     overall_avg_f1 = total_f1_sum / total_samples if total_samples > 0 else 0.0
 
+    # Report skipped templates
+    skipped_samples = sum(count for _, count in skipped_templates)
+
     return {
         "overall": {
             "total_samples": total_samples,
@@ -212,8 +272,11 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
             "accuracy": overall_accuracy,
             "average_f1": overall_avg_f1,
             "macro_f1": overall_macro_f1,
+            "skipped_templates": len(skipped_templates),
+            "skipped_samples": skipped_samples,
         },
         "per_template": template_stats,
+        "skipped_template_details": skipped_templates,
     }
 
 
@@ -248,6 +311,9 @@ def _build_data_points_from_results(
 
 def main():
     """Main function to run ECG-QA CoT evaluation with parser-matching F1 aggregation."""
+    from common_evaluator import CommonEvaluator
+    from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+
     if len(sys.argv) != 2:
         print("Usage: python evaluate_ecg_qa.py <model_name>")
         print("Example: python evaluate_ecg_qa.py meta-llama/Llama-3.2-1B")

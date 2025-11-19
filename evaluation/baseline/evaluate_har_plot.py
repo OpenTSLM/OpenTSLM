@@ -8,7 +8,6 @@
 
 import re
 import sys
-import argparse
 import io
 import base64
 from typing import Dict, Any
@@ -16,46 +15,29 @@ from typing import Dict, Any
 import matplotlib.pyplot as plt
 
 from common_evaluator_plot import CommonEvaluatorPlot
-from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
 from time_series_datasets.har_cot.HARAccQADataset import HARAccQADataset
 
 def extract_label_from_prediction(prediction: str) -> str:
-    """
-    Extract the label from the model's prediction.
-    - If 'Answer:' is present, take everything after the last 'Answer:'
-    - Otherwise, take the last word
-    - Strips whitespace and punctuation
-    """
+    """Extract the label from the model's prediction."""
     pred = prediction.strip()
-    # Find the last occurrence of 'Answer:' (case-insensitive)
     match = list(re.finditer(r'answer:\s*', pred, re.IGNORECASE))
     if match:
-        # Take everything after the last 'Answer:'
-        start = match[-1].end()
-        label = pred[start:].strip()
+        label = pred[match[-1].end():].strip()
     else:
-        # Take the last word
         label = pred.split()[-1] if pred.split() else ''
-    # Remove trailing punctuation (e.g., period, comma)
     label = re.sub(r'[\.,;:!?]+$', '', label)
     return label.lower()
 
 
 def evaluate_har_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
-    """
-    Evaluate HARAccQADataset predictions against ground truth.
-    Extracts the label from the end of the model's output and compares to ground truth.
-    """
+    """Evaluate HARAccQADataset predictions against ground truth."""
     gt_clean = ground_truth.lower().strip()
     pred_label = extract_label_from_prediction(prediction)
-    accuracy = int(gt_clean == pred_label)
-    return {"accuracy": accuracy}
+    return {"accuracy": int(gt_clean == pred_label)}
 
 
 def generate_time_series_plot(time_series) -> str:
-    """
-    Create a base64 PNG plot from a list/tuple of 1D numpy arrays (e.g., [x, y, z]).
-    """
+    """Create a base64 PNG plot from accelerometer data [x, y, z]."""
     if time_series is None:
         return None
     ts_list = list(time_series)
@@ -69,7 +51,9 @@ def generate_time_series_plot(time_series) -> str:
     for i, series in enumerate(ts_list):
         axes[i].plot(series, marker='o', linestyle='-', markersize=0)
         axes[i].grid(True, alpha=0.3)
-        axes[i].set_title(f"Accelerometer - {axis_names.get(i, f'Axis {i+1}')}" )
+        axes[i].set_title(f"Accelerometer - {axis_names.get(i, f'Axis {i+1}')}")
+        axes[i].set_ylabel("Acceleration (g)")
+    axes[-1].set_xlabel("Time (samples)")
 
     plt.tight_layout()
 
@@ -103,7 +87,7 @@ def main():
         dataset_classes=dataset_classes,
         evaluation_functions=evaluation_functions,
         plot_functions=plot_functions,
-        max_samples=None,  # Limit for faster testing, set to None for full evaluation,
+        max_samples=None,
         max_new_tokens=400,
     )
     print("\n" + "="*80)

@@ -13,67 +13,49 @@ import base64
 from typing import Dict, Any
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 from common_evaluator_plot import CommonEvaluatorPlot
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 
 def extract_label_from_text(text: str) -> str:
-    """
-    Extract the label from a free-form rationale or prediction text.
-    - If 'Answer:' is present (case-insensitive), take everything after the last 'Answer:'
-    - Otherwise, take the last word
-    - Strip whitespace and trailing punctuation
-    - Lowercase for comparison
-    """
+    """Extract the label from a prediction or rationale text."""
     if text is None:
         return ""
     pred = text.strip()
     matches = list(re.finditer(r"answer:\s*", pred, re.IGNORECASE))
     if matches:
-        start = matches[-1].end()
-        label = pred[start:].strip()
+        label = pred[matches[-1].end():].strip()
     else:
         label = pred.split()[-1] if pred.split() else ""
     label = re.sub(r"[\.,;:!?]+$", "", label)
     return label.lower()
 
 
-def evaluate_sleep_stage(
-    ground_truth_text: str, prediction_text: str
-) -> Dict[str, Any]:
-    """
-    Evaluate SleepEDFCoTQADataset predictions against ground truth.
-    For SleepEDF, the dataset's "answer" is a rationale ending with 'Answer: <label>'.
-    We therefore extract the label from BOTH ground truth and prediction and compare.
-    """
+def evaluate_sleep_stage(ground_truth_text: str, prediction_text: str) -> Dict[str, Any]:
+    """Evaluate SleepEDFCoTQADataset predictions against ground truth."""
     gt_label = extract_label_from_text(ground_truth_text)
     pred_label = extract_label_from_text(prediction_text)
-    accuracy = int(gt_label == pred_label)
-    return {"accuracy": accuracy, "gt_label": gt_label, "pred_label": pred_label}
+    return {"accuracy": int(gt_label == pred_label), "gt_label": gt_label, "pred_label": pred_label}
 
 
 def generate_time_series_plot(time_series) -> str:
-    """
-    Create a base64 PNG plot from one or more time series.
-    - Accepts a single 1D array/list or a collection of 1D arrays/lists.
-    - If a 2D numpy array is provided, each row is treated as a separate series.
-    """
+    """Create a base64 PNG plot from the first channel (EEG) of a time series."""
     if time_series is None:
         return None
     ts_list = list(time_series)
 
-    num_series = len(ts_list)
-    fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)
-    if num_series == 1:
-        axes = [axes]
+    if len(ts_list) > 0 and hasattr(ts_list[0], "__len__"):
+        eeg = ts_list[0]
+    else:
+        eeg = ts_list
 
-    axis_names = {0: "EEG", 1: "EOG", 2: "EMG"}
-    for i, series in enumerate(ts_list):
-        axes[i].plot(series, marker="o", linestyle="-", markersize=0)
-        axes[i].grid(True, alpha=0.3)
-        axes[i].set_title(f"{axis_names.get(i, f'Axis {i + 1}')}")
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(eeg, marker="o", linestyle="-", markersize=0)
+    ax.grid(True, alpha=0.3)
+    ax.set_title("EEG")
+    ax.set_ylabel("Amplitude")
+    ax.set_xlabel("Time (samples)")
 
     plt.tight_layout()
 
@@ -108,7 +90,7 @@ def main():
         dataset_classes=dataset_classes,
         evaluation_functions=evaluation_functions,
         plot_functions=plot_functions,
-        max_samples=None,  # Set to None for full evaluation
+        max_samples=None,
         max_new_tokens=400,
     )
 
