@@ -10,6 +10,17 @@ from opentslm.model.llm.TimeSeriesFlamingoWithTrainableEncoder import (
 )
 from open_flamingo.src.flamingo_lm import FlamingoLMMixin
 from open_flamingo.src.utils import extend_instance
+
+# Try to import Chronos2Encoder (may not be available if chronos-forecasting is not installed)
+try:
+    from model.encoder.Chronos2Encoder import Chronos2Encoder
+    CHRONOS2_AVAILABLE = True
+except ImportError:
+    CHRONOS2_AVAILABLE = False
+    Chronos2Encoder = None
+# from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLMMixin
+# from open_flamingo.open_flamingo.src.utils import extend_instance
+
 import torch
 import torch._dynamo
 from typing import List, Dict, Tuple
@@ -43,11 +54,36 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         cross_attn_every_n_layers: int = 1,
         decoder_layers_attr_name: str = None,
         freeze_lm_embeddings: bool = False,
+        encoder_type: str = "chronos2",  # "cnn" or "chronos2"
+        chronos2_model_name: str = "amazon/chronos-2",
+        chronos2_freeze_backbone: bool = False,
         **flamingo_kwargs,
     ):
         super().__init__(device)
         print(f"Flamingo Using device: {self.device}")
-        time_series_encoder = CNNTokenizer().to(device)
+        
+        # Select encoder type
+        if encoder_type == "chronos2":
+            if not CHRONOS2_AVAILABLE:
+                raise ImportError(
+                    "Chronos2Encoder is not available. "
+                    "Please install chronos-forecasting: pip install 'chronos-forecasting>=2.0'"
+                )
+            print(f"Using Chronos2Encoder with model: {chronos2_model_name}")
+            time_series_encoder = Chronos2Encoder(
+                model_name=chronos2_model_name,
+                output_dim=ENCODER_OUTPUT_DIM,
+                freeze_backbone=chronos2_freeze_backbone,
+                device=device,
+            )
+        elif encoder_type == "cnn":
+            print("Using CNNTokenizer")
+            time_series_encoder = CNNTokenizer().to(device)
+        else:
+            raise ValueError(
+                f"Unknown encoder_type: {encoder_type}. "
+                "Supported types: 'cnn', 'chronos2'"
+            )
 
         text_tokenizer = AutoTokenizer.from_pretrained(
             llm_id,

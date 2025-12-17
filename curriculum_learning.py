@@ -110,6 +110,12 @@ class CurriculumTrainer:
         dist_backend: str = "nccl",
         local_rank: int = int(os.environ.get("LOCAL_RANK", 0)),
         llm_id: str = None,
+        encoder_type: str = "chronos2",
+        wandb_project: str = "opentslm-curriculum",
+        wandb_entity: str = None,
+        wandb_run_name: str = None,
+        wandb_tags: List[str] = None,
+        disable_wandb: bool = False,
     ):
         """
         Initialize the curriculum trainer.
@@ -130,6 +136,7 @@ class CurriculumTrainer:
                 "🚨 Warning: Using MPS, might not be fully compatible with the model. Use CUDA for best results."
             )
         self.llm_id = llm_id
+        self.encoder_type = encoder_type
         self.llm_id_safe = self._sanitize_llm_id(llm_id)
 
         # Distributed training parameters
@@ -145,7 +152,34 @@ class CurriculumTrainer:
             self._init_distributed()
 
         self.model = self._initialize_model()
-        self.results_dir = os.path.join("results", self.llm_id_safe, self.model_type)
+
+        # Wandb configuration
+        self.wandb_project = wandb_project
+        self.wandb_entity = wandb_entity
+        self.wandb_run_name = wandb_run_name
+        self.wandb_tags = wandb_tags or []
+        self.disable_wandb = disable_wandb
+        self.wandb_run = None
+        self.wandb_initialized = False
+
+        self.base_dir = os.getenv("AMLT_BLOB_ROOT_DIR")
+        if self.base_dir is None:
+            print('AMLT_BLOB_ROOT_DIR is not set, likely we are using development mode, using current directory')
+            self.base_dir = os.getcwd()
+        else:
+            self.base_dir = os.path.join(self.base_dir, "juncheng","OpenTSLM")
+        
+        # Build results directory path
+        # For OpenTSLMFlamingo, include encoder_type in the path
+        if self.model_type == "OpenTSLMFlamingo":
+            self.results_dir = os.path.join(
+                self.base_dir, "results", self.llm_id_safe, self.model_type, self.encoder_type
+            )
+        else:
+            # For OpenTSLMSP, encoder_type is not applicable
+            self.results_dir = os.path.join(
+                self.base_dir, "results", self.llm_id_safe, self.model_type
+            )
         self._create_results_dir()
 
     def _get_device(self) -> str:
@@ -156,6 +190,126 @@ class CurriculumTrainer:
             return "mps"
         else:
             return "cpu"
+
+    def _init_wandb(self, stage_name: str = None, resume: bool = False):
+        """Initialize wandb for tracking experiments."""
+        if self.disable_wandb or (dist.is_initialized() and self.rank != 0):
+            return
+
+        try:
+            # Build a fresh run name per stage without mutating the base name
+            base_run_name = self.wandb_run_name
+            if not base_run_name:
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                base_run_name = f"{self.model_type}_{self.llm_id_safe}_{timestamp}"
+
+            stage_run_name = f"{base_run_name}_{stage_name}" if stage_name else base_run_name
+
+            # Prepare tags
+            tags = self.wandb_tags.copy()
+            tags.extend([self.model_type, self.llm_id_safe])
+            if self.model_type == "OpenTSLMFlamingo":
+                tags.append(f"encoder_{self.encoder_type}")
+            if stage_name:
+                tags.append(stage_name)
+            if self.world_size > 1:
+                tags.append("distributed")
+
+            # Initialize wandb
+            wandb_config = {
+                "model_type": self.model_type,
+                "llm_id": self.llm_id,
+                "device": self.device,
+                "world_size": self.world_size,
+                "rank": self.rank,
+                "gradient_checkpointing": self.gradient_checkpointing,
+                "stage": stage_name,
+            }
+            # Add encoder_type to config for OpenTSLMFlamingo
+            if self.model_type == "OpenTSLMFlamingo":
+                wandb_config["encoder_type"] = self.encoder_type
+            
+            self.wandb_run = wandb.init(
+                project=self.wandb_project,
+                entity=self.wandb_entity,
+                name=stage_run_name,
+                tags=tags,
+                resume=resume,
+                config=wandb_config,
+            )
+            self.wandb_initialized = True
+            
+            if self.rank == 0:
+                print(f"🔬 Wandb initialized: {self.wandb_run.url}")
+                
+        except Exception as e:
+            if self.rank == 0:
+                print(f"⚠️  Failed to initialize wandb: {e}")
+                print("   Continuing without wandb logging...")
+            self.disable_wandb = True
+
+    def _log_wandb_metrics(self, metrics: Dict[str, Any], step: int = None, prefix: str = ""):
+        """Log metrics to wandb."""
+        if not self.wandb_initialized or self.disable_wandb:
+            return
+
+        try:
+            # Add prefix to metric names
+            if prefix:
+                metrics = {f"{prefix}/{k}": v for k, v in metrics.items()}
+            
+            wandb.log(metrics, step=step)
+        except Exception as e:
+            if self.rank == 0:
+                print(f"⚠️  Failed to log metrics to wandb: {e}")
+
+    def _log_model_info_to_wandb(self):
+        """Log model architecture and system information to wandb."""
+        if not self.wandb_initialized or self.disable_wandb:
+            return
+
+        try:
+            model = self._get_model()
+            
+            # Count parameters
+            total_params = sum(p.numel() for p in model.parameters())
+            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            
+            # Log model information
+            model_info = {
+                "model/total_parameters": total_params,
+                "model/trainable_parameters": trainable_params,
+                "model/parameter_ratio": trainable_params / total_params if total_params > 0 else 0,
+                "model/model_type": self.model_type,
+                "model/llm_id": self.llm_id,
+                "system/device": self.device,
+                "system/world_size": self.world_size,
+                "system/rank": self.rank,
+            }
+            
+            # Add GPU memory info if available
+            if torch.cuda.is_available():
+                model_info.update({
+                    "system/gpu_memory_allocated": torch.cuda.memory_allocated() / 1024**3,  # GB
+                    "system/gpu_memory_reserved": torch.cuda.memory_reserved() / 1024**3,   # GB
+                    "system/gpu_count": torch.cuda.device_count(),
+                })
+            
+            wandb.log(model_info, step=0)
+            
+        except Exception as e:
+            if self.rank == 0:
+                print(f"⚠️  Failed to log model info to wandb: {e}")
+
+    def _finish_wandb(self):
+        """Finish wandb run."""
+        if self.wandb_initialized and not self.disable_wandb:
+            try:
+                wandb.finish()
+                self.wandb_initialized = False
+            except Exception as e:
+                if self.rank == 0:
+                    print(f"⚠️  Failed to finish wandb run: {e}")
 
     def _initialize_model(self):
         """Initialize the specified model type."""
@@ -168,6 +322,7 @@ class CurriculumTrainer:
                 gradient_checkpointing=self.gradient_checkpointing,
                 llm_id=self.llm_id,
                 device=self.device,
+                encoder_type=self.encoder_type,
             ).to(self.device)
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
@@ -1658,6 +1813,13 @@ def main():
         default="meta-llama/Llama-3.2-1B",
         help="LLM model ID for OpenTSLMFlamingo (e.g., 'google/medgemma-2b', 'meta-llama/Llama-3.2-1B')",
     )
+    parser.add_argument(
+        "--encoder_type",
+        type=str,
+        choices=["cnn", "chronos2"],
+        default="chronos2",
+        help="Encoder type for OpenTSLMFlamingo: 'cnn' or 'chronos2'",
+    )
 
     # Distributed training arguments
     parser.add_argument(
@@ -1702,6 +1864,12 @@ def main():
         dist_backend=args.dist_backend,
         local_rank=args.local_rank,
         llm_id=args.llm_id,
+        encoder_type=args.encoder_type,
+        wandb_project=args.wandb_project,
+        wandb_entity=args.wandb_entity,
+        wandb_run_name=args.wandb_run_name,
+        wandb_tags=args.wandb_tags,
+        disable_wandb=args.disable_wandb,
     )
 
     # Run curriculum
