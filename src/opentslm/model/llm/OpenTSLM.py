@@ -50,6 +50,7 @@ class OpenTSLM:
         device: Optional[str] = None,
         cache_dir: Optional[str] = None,
         enable_lora: Optional[bool] = False,
+        encoder_type: str = "cnn",
     ) -> Union[OpenTSLMSP, OpenTSLMFlamingo]:
         """
         Load a pretrained model from Hugging Face Hub.
@@ -59,6 +60,7 @@ class OpenTSLM:
             device: Device to load the model on (default: auto-detect)
             cache_dir: Directory to cache downloaded models (optional)
             enable_lora: Whether to enable LoRA (default: False)
+            encoder_type: Encoder type for OpenTSLMFlamingo models: 'cnn' or 'chronos2' (default: 'cnn')
 
         Returns:
             Union[OpenTSLMSP, OpenTSLMFlamingo]: The loaded model instance
@@ -86,11 +88,14 @@ class OpenTSLM:
                 model.enable_lora()
         elif model_type == ModelType.FLAMINGO:
             # OpenTSLMFlamingo with fixed parameters from curriculum learning
+            # Default to 'cnn' encoder_type for backward compatibility with existing HF models
+            print(f"   Encoder type: {encoder_type}")
             model = OpenTSLMFlamingo(
                 device=device,
                 llm_id=base_llm_id,
                 cross_attn_every_n_layers=1,
                 gradient_checkpointing=False,
+                encoder_type=encoder_type,
             )
         else:
             raise ValueError(f"Unknown model type: {model_type}")

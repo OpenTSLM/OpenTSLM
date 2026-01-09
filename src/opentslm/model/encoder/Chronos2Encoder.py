@@ -44,6 +44,7 @@ class Chronos2Encoder(TimeSeriesEncoderBase):
         dropout: float = 0.0,
         freeze_backbone: bool = False,
         device: Optional[str] = None,
+        use_group_ids: bool = False,
     ):
         super().__init__(output_dim, dropout)
         
@@ -55,6 +56,7 @@ class Chronos2Encoder(TimeSeriesEncoderBase):
         
         self.model_name = model_name
         self.freeze_backbone = freeze_backbone
+        self.use_group_ids = use_group_ids
         
         # Load Chronos-2 model
         # Note: We only need the encoder part, but we load the full model
@@ -83,7 +85,10 @@ class Chronos2Encoder(TimeSeriesEncoderBase):
         
         # Create projection layer to map from encoder hidden dim to output dim
         self.projection = nn.Linear(encoder_hidden_dim, output_dim)
-        
+
+        # Normalize projected tokens to keep scale consistent with CNNTokenizer
+        self.output_norm = nn.LayerNorm(output_dim)
+
         # Dropout layer
         self.output_dropout = nn.Dropout(self.dropout)
         
@@ -107,11 +112,6 @@ class Chronos2Encoder(TimeSeriesEncoderBase):
         device = next(self.chronos_model.parameters()).device
         x = x.to(device)
         
-        # Chronos-2 expects context as input
-        # For univariate time series, we don't need group_ids
-        # Create group_ids: each time series is its own group (all zeros for single group)
-        group_ids = torch.zeros(B, dtype=torch.long, device=device)
-        
         # Forward through Chronos-2 model to get encoder outputs
         # We use a hook to extract the encoder's hidden states
         # This is necessary because Chronos2Model doesn't expose encoder outputs directly
@@ -132,12 +132,18 @@ class Chronos2Encoder(TimeSeriesEncoderBase):
             # We call the full model forward, but only use the encoder outputs
             # num_output_patches=1 minimizes computation since we don't need predictions
             with torch.set_grad_enabled(not self.freeze_backbone):
-                _ = self.chronos_model(
+                forward_kwargs = dict(
                     context=x,
-                    group_ids=group_ids,
                     num_output_patches=1,  # Minimal output patches since we only need encoder
                     output_attentions=False,
                 )
+                # For univariate time series, Chronos2 model handles grouping internally.
+                # Passing group_ids=None follows Chronos2 model.py recommendations.
+                if self.use_group_ids:
+                    forward_kwargs["group_ids"] = torch.zeros(
+                        B, dtype=torch.long, device=device
+                    )
+                _ = self.chronos_model(**forward_kwargs)
         finally:
             handle.remove()
         
@@ -150,8 +156,9 @@ class Chronos2Encoder(TimeSeriesEncoderBase):
         # Project to output dimension
         # hidden_states: [B, N, 768] -> [B, N, output_dim]
         projected = self.projection(hidden_states)
-        
-        # Apply dropout
+
+        # Normalize + dropout (matches CNNTokenizer behavior which uses LayerNorm)
+        projected = self.output_norm(projected)
         output = self.output_dropout(projected)
         
         return output

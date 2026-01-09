@@ -138,6 +138,9 @@ class CurriculumTrainer:
         self.llm_id = llm_id
         self.encoder_type = encoder_type
         self.llm_id_safe = self._sanitize_llm_id(llm_id)
+        
+        # Generate training timestamp (precision to minute)
+        # self.train_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
         # Distributed training parameters
         self.gradient_checkpointing = gradient_checkpointing
@@ -170,7 +173,7 @@ class CurriculumTrainer:
             self.base_dir = os.path.join(self.base_dir, "juncheng","OpenTSLM")
         
         # Build results directory path
-        # For OpenTSLMFlamingo, include encoder_type in the path
+        # For OpenTSLMFlamingo, include encoder_type and training timestamp in the path
         if self.model_type == "OpenTSLMFlamingo":
             self.results_dir = os.path.join(
                 self.base_dir, "results", self.llm_id_safe, self.model_type, self.encoder_type
@@ -209,7 +212,7 @@ class CurriculumTrainer:
             tags = self.wandb_tags.copy()
             tags.extend([self.model_type, self.llm_id_safe])
             if self.model_type == "OpenTSLMFlamingo":
-                tags.append(f"encoder_{self.encoder_type}")
+                tags.append(f"enc_{self.encoder_type}")
             if stage_name:
                 tags.append(stage_name)
             if self.world_size > 1:
@@ -250,7 +253,7 @@ class CurriculumTrainer:
 
     def _log_wandb_metrics(self, metrics: Dict[str, Any], step: int = None, prefix: str = ""):
         """Log metrics to wandb."""
-        if not self.wandb_initialized or self.disable_wandb:
+        if not self.wandb_initialized or self.disable_wandb or self.wandb_run is None:
             return
 
         try:
@@ -258,7 +261,7 @@ class CurriculumTrainer:
             if prefix:
                 metrics = {f"{prefix}/{k}": v for k, v in metrics.items()}
             
-            wandb.log(metrics, step=step)
+            self.wandb_run.log(metrics, step=step)
         except Exception as e:
             if self.rank == 0:
                 print(f"⚠️  Failed to log metrics to wandb: {e}")
@@ -295,7 +298,7 @@ class CurriculumTrainer:
                     "system/gpu_count": torch.cuda.device_count(),
                 })
             
-            wandb.log(model_info, step=0)
+            self.wandb_run.log(model_info, step=0)
             
         except Exception as e:
             if self.rank == 0:
@@ -303,10 +306,11 @@ class CurriculumTrainer:
 
     def _finish_wandb(self):
         """Finish wandb run."""
-        if self.wandb_initialized and not self.disable_wandb:
+        if self.wandb_initialized and not self.disable_wandb and self.wandb_run is not None:
             try:
-                wandb.finish()
+                self.wandb_run.finish()
                 self.wandb_initialized = False
+                self.wandb_run = None
             except Exception as e:
                 if self.rank == 0:
                     print(f"⚠️  Failed to finish wandb run: {e}")
@@ -1142,6 +1146,33 @@ class CurriculumTrainer:
 
         # Initialize optimizer and scheduler
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
+        
+        # Update wandb config with learning rates after optimizer is created
+        if self.wandb_initialized and not self.disable_wandb and self.wandb_run is not None:
+            try:
+                lr_config = {}
+                if self.model_type == "OpenTSLMSP":
+                    # Extract learning rates from optimizer param_groups
+                    param_groups = optimizer.param_groups
+                    if len(param_groups) > 0:
+                        lr_config["lr_encoder"] = param_groups[0]["lr"]
+                    if len(param_groups) > 1:
+                        lr_config["lr_projector"] = param_groups[1]["lr"]
+                    if len(param_groups) > 2:
+                        lr_config["lr_lora"] = param_groups[2]["lr"]
+                else:
+                    # For Flamingo, use base_lr
+                    if len(optimizer.param_groups) > 0:
+                        lr_config["lr_base"] = optimizer.param_groups[0]["lr"]
+                
+                # Also add batch size and other training config
+                lr_config["batch_size"] = batch_size
+                lr_config["num_epochs"] = num_epochs
+                
+                self.wandb_run.config.update(lr_config)
+            except Exception as e:
+                if self.rank == 0:
+                    print(f"⚠️  Failed to update wandb config with learning rates: {e}")
 
         # Create data loaders
         if sampler is not None:

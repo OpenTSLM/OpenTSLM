@@ -56,12 +56,13 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         freeze_lm_embeddings: bool = False,
         encoder_type: str = "chronos2",  # "cnn" or "chronos2"
         chronos2_model_name: str = "amazon/chronos-2",
-        chronos2_freeze_backbone: bool = False,
+        chronos2_freeze_backbone: bool = True, # default to freeze avoiding training the whole backbone 
         **flamingo_kwargs,
     ):
         super().__init__(device)
         print(f"Flamingo Using device: {self.device}")
         
+        self.encoder_type = encoder_type
         # Select encoder type
         if encoder_type == "chronos2":
             if not CHRONOS2_AVAILABLE:
@@ -91,6 +92,8 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             trust_remote_code=True,
             cache_dir=None,
         )
+        # Decoder-only models expect left padding for generation.
+        text_tokenizer.padding_side = "left"
 
         lang_encoder = AutoModelForCausalLM.from_pretrained(
             llm_id,
@@ -207,13 +210,21 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                     # Ensure padding has the same number of dimensions as the time series
                     padding_shape = list(ts.shape)
                     padding_shape[1] = max_length - current_length
-                    padding = torch.zeros(
-                        padding_shape, device=ts.device, dtype=ts.dtype
-                    )
-                    padded = torch.cat([ts, padding], dim=1)
+                    if self.encoder_type == "chronos2":
+                        # use left padding for chronos2 encoder and fill nan for padding 
+                        padding = torch.full(padding_shape, torch.nan, device=ts.device, dtype=ts.dtype)
+                        padded = torch.cat([padding, ts], dim=1)
+                    else: 
+                        padding = torch.zeros(
+                            padding_shape, device=ts.device, dtype=ts.dtype
+                        )
+                        padded = torch.cat([ts, padding], dim=1)
                 else:
                     # If already at or exceeding max_length, truncate
-                    padded = ts[:, :max_length]
+                    if self.encoder_type == "chronos2": # use left padding for chronos2 encoder
+                        padded = ts[:, -max_length:]
+                    else:
+                        padded = ts[:, :max_length]
 
                 padded_series.append(padded)
 
