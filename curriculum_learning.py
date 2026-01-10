@@ -10,6 +10,8 @@ import json
 import os as _os
 import argparse
 from typing import List, Optional, Dict, Any, Callable
+import wandb
+from dotenv import load_dotenv
 from opentslm.time_series_datasets.TSQADataset import TSQADataset
 from opentslm.time_series_datasets.m4.M4QADataset import M4QADataset
 from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
@@ -66,6 +68,7 @@ CURRICULUM_STAGES = [
     "stage5_ecg_cot",
 ]
 
+load_dotenv()
 
 class CurriculumTrainer:
     """
@@ -1015,6 +1018,9 @@ class CurriculumTrainer:
                     print(f"   {metric}: {value:.4f}")
                 else:
                     print(f"   {metric}: {value}")
+            
+            # Log evaluation metrics to wandb
+            self._log_wandb_metrics(metrics, step=epoch, prefix="evaluation")
 
         # Signal other ranks that evaluation is complete
         if dist.is_initialized():
@@ -1078,6 +1084,12 @@ class CurriculumTrainer:
             if self.world_size > 1:
                 print(f"   Effective batch size: {batch_size * self.world_size}")
             print()
+
+        # Initialize wandb for this stage (force a fresh run per stage)
+        self._init_wandb(stage_name=stage_name, resume=False)
+        
+        # Log model and system information
+        self._log_model_info_to_wandb()
 
         # Check if checkpoint exists when in eval_only mode
         if eval_only and not self._checkpoint_exists(stage_name):
@@ -1317,6 +1329,13 @@ class CurriculumTrainer:
                 avg_train_loss = running_loss / len(train_loader)
                 if self.rank == 0:
                     tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
+                
+                # Log training metrics to wandb
+                self._log_wandb_metrics({
+                    "train_loss": avg_train_loss,
+                    "learning_rate": scheduler.get_last_lr()[0],
+                    "epoch": epoch
+                }, step=epoch, prefix="training")
 
                 # Validation
                 val_loss = 0.0
@@ -1340,6 +1359,13 @@ class CurriculumTrainer:
                 if self.rank == 0:
                     tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
                     tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
+                
+                # Log validation metrics to wandb
+                self._log_wandb_metrics({
+                    "val_loss": avg_val_loss,
+                    "best_val_loss": best_val_loss,
+                    "epochs_no_improve": epochs_no_improve
+                }, step=epoch, prefix="validation")
 
                 # Save loss history for this epoch
                 self._save_loss_history(stage_name, epoch, avg_train_loss, avg_val_loss)
@@ -1412,6 +1438,9 @@ class CurriculumTrainer:
         metrics = self._evaluate_stage(
             stage_name, test_loader, stage_name, metric_func, best_epoch
         )
+
+        # Finish wandb run for this stage
+        self._finish_wandb()
 
         return metrics
 
@@ -1880,12 +1909,44 @@ def main():
         "--verbose", default=False, action="store_true", help="Enable verbose logging"
     )
 
+    # Wandb arguments
+    parser.add_argument(
+        "--wandb_project",
+        type=str,
+        default="opentslm-curriculum",
+        help="Weights & Biases project name",
+    )
+    parser.add_argument(
+        "--wandb_entity",
+        type=str,
+        default=None,
+        help="Weights & Biases entity/team name",
+    )
+    parser.add_argument(
+        "--wandb_run_name",
+        type=str,
+        default=None,
+        help="Custom run name for wandb",
+    )
+    parser.add_argument(
+        "--wandb_tags",
+        nargs="+",
+        default=[],
+        help="Tags for experiment organization",
+    )
+    parser.add_argument(
+        "--disable_wandb",
+        default=False,
+        action="store_true",
+        help="Disable wandb logging",
+    )
     args = parser.parse_args()
 
     # Set up global logging
     set_global_verbose(args.verbose)
     logger = get_logger(verbose=args.verbose)
 
+    wandb.login(key=os.environ["WANDB_API_KEY"], relogin=True)
     # Initialize trainer
     trainer = CurriculumTrainer(
         args.model,

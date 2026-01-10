@@ -10,8 +10,8 @@ import torch
 import torch.nn as nn
 from typing import Optional
 
-from model_config import ENCODER_OUTPUT_DIM
-from model.encoder.TimeSeriesEncoderBase import TimeSeriesEncoderBase
+from opentslm.model_config import ENCODER_OUTPUT_DIM
+from opentslm.model.encoder.TimeSeriesEncoderBase import TimeSeriesEncoderBase
 
 try:
     from chronos import Chronos2Model

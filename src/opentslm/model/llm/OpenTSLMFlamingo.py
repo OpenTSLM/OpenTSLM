@@ -13,7 +13,7 @@ from open_flamingo.src.utils import extend_instance
 
 # Try to import Chronos2Encoder (may not be available if chronos-forecasting is not installed)
 try:
-    from model.encoder.Chronos2Encoder import Chronos2Encoder
+    from opentslm.model.encoder.Chronos2Encoder import Chronos2Encoder
     CHRONOS2_AVAILABLE = True
 except ImportError:
     CHRONOS2_AVAILABLE = False
@@ -184,6 +184,8 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             model.lang_encoder.get_input_embeddings().requires_grad_(True)
             # TODO: investigate also training the output embeddings when untied
 
+        # print(type(model.vision_encoder), model.vision_encoder)
+        # print(dir(model.vision_encoder))
         # additonally unfreeze encoder
         model.vision_encoder.requires_grad_(True)
 
