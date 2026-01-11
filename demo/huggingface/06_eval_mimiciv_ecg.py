@@ -40,7 +40,21 @@ from opentslm.model_config import PATCH_SIZE
 # Define your custom prompts here
 # These will be applied to each sample in the dataset
 CUSTOM_PROMPTS = [
-    "Please summarize the ECG signal in a single paragraph and give a diagnosis",
+    "Summarize this ECG and highlight any clinically relevant findings.",
+    "Provide an overall interpretation of this ECG.",
+    "What are your findings on this ECG?",
+    "Describe this ECG in a clinically meaningful way.",
+    "Interpret this ECG and describe any abnormalities.",
+    "What stands out as abnormal on this ECG?",
+    "What are the key findings on this ECG?",
+    "Are there any clinically significant abnormalities on this ECG?",
+    "Based on this ECG, what is the most likely diagnosis?",
+    "What diagnoses should be considered based on this ECG?",
+    "Does this ECG show signs of arrhythmia?",
+    "Does this ECG show signs of atrial fibrillation?",
+    "Are there any ST-segment or T-wave abnormalities?",
+    "Are there any signs of ischemia or myocardial infarction?",
+    "Does this ECG show evidence of structural heart disease?",
 ]
 
 
