@@ -39,23 +39,78 @@ from opentslm.model_config import PATCH_SIZE
 
 # Define your custom prompts here
 # These will be applied to each sample in the dataset
-CUSTOM_PROMPTS = [
-    "Summarize this ECG and highlight any clinically relevant findings.",
-    "Provide an overall interpretation of this ECG.",
-    "What are your findings on this ECG?",
-    "Describe this ECG in a clinically meaningful way.",
-    "Interpret this ECG and describe any abnormalities.",
-    "What stands out as abnormal on this ECG?",
-    "What are the key findings on this ECG?",
-    "Are there any clinically significant abnormalities on this ECG?",
-    "Based on this ECG, what is the most likely diagnosis?",
-    "What diagnoses should be considered based on this ECG?",
-    "Does this ECG show signs of arrhythmia?",
-    "Does this ECG show signs of atrial fibrillation?",
-    "Are there any ST-segment or T-wave abnormalities?",
-    "Are there any signs of ischemia or myocardial infarction?",
-    "Does this ECG show evidence of structural heart disease?",
+
+# List of allowed diagnoses
+ALLOWED_DIAGNOSES = [
+    "non-diagnostic T abnormalities", "non-specific ST changes", "digitalis-effect", "long QT-interval", 
+    "normal ECG", "inferior myocardial infarction", "anteroseptal myocardial infarction", 
+    "left ventricular hypertrophy", "left anterior fascicular block", "non-specific ischemic", 
+    "incomplete right bundle branch block", "first degree AV block", 
+    "non-specific intraventricular conduction disturbance (block)", "ischemic in anterolateral leads", 
+    "complete right bundle branch block", "complete left bundle branch block", 
+    "inferolateral myocardial infarction", "left atrial overload/enlargement", 
+    "anterior myocardial infarction", "anterolateral myocardial infarction", 
+    "ischemic in inferior leads", "subendocardial injury in anteroseptal leads", 
+    "lateral myocardial infarction", "ischemic in inferolateral leads", 
+    "left posterior fascicular block", "ischemic in anteroseptal leads", 
+    "subendocardial injury in anterolateral leads", "ischemic in lateral leads", 
+    "right ventricular hypertrophy", "ST-T changes compatible with ventricular aneurysm", 
+    "right atrial overload/enlargement", "electrolytic disturbance or drug (former EDIS)", 
+    "Wolf-Parkinson-White syndrome", "incomplete left bundle branch block", 
+    "inferoposterolateral myocardial infarction", "ischemic in anterior leads", 
+    "inferoposterior myocardial infarction", "septal hypertrophy", 
+    "subendocardial injury in inferior leads", "subendocardial injury in lateral leads", 
+    "posterior myocardial infarction", "third degree AV block", 
+    "subendocardial injury in inferolateral leads", "second degree AV block", 
+    "abnormal QRS", "ventricular premature complex", "non-specific ST depression", 
+    "voltage criteria (QRS) for left ventricular hypertrophy", "Q waves present", 
+    "low amplitude T-waves", "non-specific T-wave changes", "atrial premature complex", 
+    "prolonged PR interval", "inverted T-waves", 
+    "low QRS voltages in the frontal and horizontal leads", "high QRS voltage", 
+    "T-wave abnormality", "non-specific ST elevation", "premature complex(es)", 
+    "sinus rhythm", "atrial fibrillation", "sinus tachycardia", "sinus arrhythmia", 
+    "sinus bradycardia", "normal functioning artificial pacemaker", 
+    "supraventricular arrhythmia", "bigeminal pattern (unknown origin, SV or Ventricular)", 
+    "atrial flutter", "supraventricular tachycardia", 
+    "paroxysmal supraventricular tachycardia", 
+    "trigeminal pattern (unknown origin, SV or Ventricular)"
 ]
+
+# Prompt version 1: WITH the diagnoses list
+prompt_with_list = f"""You are an expert cardiologist analyzing an ECG (electrocardiogram).
+
+Your task is to examine the ECG signal and provide a diagnosis.
+
+Please describe this ECG and diagnose it with one or more of the following conditions: {', '.join(ALLOWED_DIAGNOSES)}
+
+Then for each diagnosis, please explain your reasoning."""
+
+# Prompt version 2: WITHOUT the diagnoses list
+prompt_without_list = """You are an expert cardiologist analyzing an ECG (electrocardiogram).
+
+Your task is to examine the ECG signal and provide a diagnosis.
+
+Please describe this ECG and provide one or more diagnoses.
+
+Then for each diagnosis, please explain your reasoning."""
+
+CUSTOM_PROMPTS = [prompt_with_list, prompt_without_list]
+#    "Summarize this ECG and highlight any clinically relevant findings.",
+#    "Provide an overall interpretation of this ECG.",
+#    "What are your findings on this ECG?",
+#    "Describe this ECG in a clinically meaningful way.",
+#    "Interpret this ECG and describe any abnormalities.",
+#    "What stands out as abnormal on this ECG?",
+#    "What are the key findings on this ECG?",
+#    "Are there any clinically significant abnormalities on this ECG?",
+#    "Based on this ECG, what is the most likely diagnosis?",
+#    "What diagnoses should be considered based on this ECG?",
+#    "Does this ECG show signs of arrhythmia?",
+#    "Does this ECG show signs of atrial fibrillation?",
+#    "Are there any ST-segment or T-wave abnormalities?",
+#    "Are there any signs of ischemia or myocardial infarction?",
+#    "Does this ECG show evidence of structural heart disease?",
+#]
 
 
 def main():
@@ -65,7 +120,7 @@ def main():
     parser.add_argument(
         "--model_repo",
         type=str,
-        default="OpenTSLM/llama-3.2-1b-ecg-sp",
+        default="OpenTSLM/llama-3.2-3b-ecg-sp",
         help="HuggingFace repository ID or local path to model",
     )
     parser.add_argument(
@@ -123,6 +178,12 @@ def main():
         action="store_true",
         help="Don't reorder leads to match ECG-QA order",
     )
+    parser.add_argument(
+        "--use_custom_prompt_directly",
+        action="store_true",
+        help="Use custom prompt as-is without default pre/post-prompt wrapper. "
+             "Useful when custom prompt contains its own instructions.",
+    )
     
     args = parser.parse_args()
     
@@ -172,6 +233,7 @@ def main():
             ecg_data_dir=args.ecg_data_dir,
             custom_prompts=custom_prompts,
             fix_lead_order=not args.no_fix_lead_order,
+            use_custom_prompt_directly=args.use_custom_prompt_directly,
         )
     except Exception as e:
         print(f"Error loading dataset: {e}")

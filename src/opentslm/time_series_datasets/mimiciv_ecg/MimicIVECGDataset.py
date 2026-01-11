@@ -57,6 +57,7 @@ class MimicIVECGDataset(QADataset):
         pre_prompt_template: Optional[str] = None,
         post_prompt_template: Optional[str] = None,
         fix_lead_order: bool = True,
+        use_custom_prompt_directly: bool = False,
     ):
         """
         Initialize MimicIV-ECG Dataset.
@@ -75,6 +76,8 @@ class MimicIVECGDataset(QADataset):
             pre_prompt_template: Optional template for pre-prompt. Can use {question} placeholder.
             post_prompt_template: Optional template for post-prompt.
             fix_lead_order: If True, reorder leads to match ECG-QA order (I, II, III, aVR, aVL, aVF, V1-V6)
+            use_custom_prompt_directly: If True, use custom prompt as-is without default wrapper. 
+                                      When True, pre_prompt_template and post_prompt_template are ignored.
         """
         self.max_samples = max_samples
         self.ecg_data_dir = ecg_data_dir
@@ -82,6 +85,7 @@ class MimicIVECGDataset(QADataset):
         self.pre_prompt_template = pre_prompt_template
         self.post_prompt_template = post_prompt_template
         self.fix_lead_order = fix_lead_order
+        self.use_custom_prompt_directly = use_custom_prompt_directly
         
         # Override parent initialization to handle NaN samples
         self.EOS_TOKEN = EOS_TOKEN
@@ -178,6 +182,10 @@ class MimicIVECGDataset(QADataset):
             # Single string: use for all samples
             question = str(self.custom_prompts)
         
+        # If use_custom_prompt_directly is True, return the prompt as-is
+        if self.use_custom_prompt_directly:
+            return question.strip()
+        
         # Use template if provided
         if self.pre_prompt_template:
             pre_prompt = self.pre_prompt_template.format(question=question)
@@ -201,6 +209,10 @@ Instructions:
 
     def _get_post_prompt(self, row) -> str:
         """Generate the post-prompt with instructions."""
+        # If use_custom_prompt_directly is True, return empty post-prompt
+        if self.use_custom_prompt_directly:
+            return ""
+        
         if self.post_prompt_template:
             return self.post_prompt_template.strip()
         
