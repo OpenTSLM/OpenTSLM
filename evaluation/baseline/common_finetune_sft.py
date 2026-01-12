@@ -67,7 +67,7 @@ def run_sft(
 
     model = AutoModelForImageTextToText.from_pretrained( 
         llm_id,
-        attn_implementation="flash_attention_2",  # More memory efficient
+        attn_implementation="eager",  # Use eager attention (flash_attention_2 requires flash-attn package)
         torch_dtype=torch.bfloat16,  # Explicit bfloat16 for memory savings
         device_map="auto",
         low_cpu_mem_usage=True,  # Reduce CPU memory usage during loading
