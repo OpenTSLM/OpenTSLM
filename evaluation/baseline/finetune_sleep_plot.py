@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-#
-# Minimal: load SleepEDF train split and plot first sample
-#
+"""Fine-tune Gemma on SleepEDF dataset with LoRA."""
 
 import os
 import sys
@@ -11,29 +9,25 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from PIL import Image
 import io
- 
-# Ensure project src/ is on sys.path so we can import time_series_datasets
+
 PROJECT_SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 if PROJECT_SRC not in sys.path:
     sys.path.insert(0, PROJECT_SRC)
 
-"""Also add project root so we can import sibling modules when running script directly."""
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
-# Prefer local import when running from evaluation/baseline, fall back to package path
 try:
-    from common_finetune_sft import run_sft  # when cwd is this folder or script path is used
+    from common_finetune_sft import run_sft
 except ModuleNotFoundError:
     from evaluation.baseline.common_finetune_sft import run_sft
 
 
 def _time_series_to_pil(time_series) -> Image.Image:
-    """Render a 1D or 2D time series array to a PIL RGB image (no disk I/O)."""
-    # Normalize to list of 1D arrays
+    """Render a 1D or 2D time series array to a PIL RGB image."""
     if isinstance(time_series, np.ndarray):
         if time_series.ndim == 1:
             ts_list = [time_series]
@@ -64,21 +58,16 @@ def _time_series_to_pil(time_series) -> Image.Image:
     img = Image.open(buf).convert("RGB")
     return img
 
-def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
-    """Build chat-style messages using pre/post prompts and an image of the time series.
 
-    We intentionally do NOT include the raw time series as text. The assistant content
-    is the provided sample["answer"].
-    """
+def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
+    """Build chat-style messages with EEG plot for training."""
     pre = (sample.get("pre_prompt") or "").strip()
     post = (sample.get("post_prompt") or "").strip()
     ans = (sample.get("answer") or "").strip()
-    
-    # Append EOS token to answer if provided
+
     if eos_token:
         ans = ans + eos_token
 
-    # Prefer original_data field injected by SleepEDFCoTQADataset
     ts = sample.get("original_data", sample.get("time_series", None))
     img = _time_series_to_pil(ts)
 
@@ -104,10 +93,7 @@ def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Plot the first SleepEDF train sample (default) or run Gemma SFT with --sft."
-    )
-    # SFT options
+    parser = argparse.ArgumentParser(description="Fine-tune Gemma on SleepEDF dataset with LoRA")
     parser.add_argument("--output-dir", type=str, default="runs/gemma3-4b-pt-sleep-lora")
     parser.add_argument("--llm-id", type=str, default="google/gemma-3-4b-pt")
     parser.add_argument("--max-samples", type=int, default=1000)
@@ -116,20 +102,16 @@ def main():
     parser.add_argument("--per-device-train-batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=16)
     parser.add_argument("--max-seq-len", type=int, default=4096)
-
     args = parser.parse_args()
 
-    # Load processor to get EOS token
     from transformers import AutoProcessor
     processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
     eos_token = processor.tokenizer.eos_token
 
-    # Build training chat examples with images from SleepEDF train split
     ds = SleepEDFCoTQADataset(split="train", EOS_TOKEN="")
     n = len(ds) if args.max_samples is None else min(args.max_samples, len(ds))
     train_examples = [_build_messages_from_sample(ds[i], eos_token=eos_token) for i in range(n)]
 
-    # print(_build_messages_from_sample(ds[0]))
     run_sft(
         train_examples,
         output_dir=args.output_dir,
@@ -140,14 +122,6 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         max_seq_len=args.max_seq_len,
     )
-
-    # SleepEDFCoTQADataset._format_sample adds 'original_data'
-    # time_series = sample.get("original_data", None)
-    # if time_series is None:
-    #     # Fallback: try the raw dataset field if present
-    #     time_series = sample.get("time_series", None)
-
-    # plot_time_series(time_series)
 
 
 if __name__ == "__main__":

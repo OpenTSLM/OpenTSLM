@@ -32,12 +32,7 @@ except ModuleNotFoundError:
 
 
 def _ecg_leads_to_pil(leads: list[np.ndarray]) -> Image.Image:
-    """Render multiple ECG leads (1D arrays) to a single PIL RGB image without disk I/O.
-
-    - Accepts a list of 1D arrays. Non-numeric or empty arrays are skipped.
-    - Arranges subplots in a vertical stack (up to 12 leads typical), sharing x-axis.
-    """
-    # Filter/normalize input
+    """Render multiple ECG leads to a single PIL RGB image."""
     ts_list = []
     for s in leads:
         try:
@@ -79,89 +74,54 @@ def _ecg_leads_to_pil(leads: list[np.ndarray]) -> Image.Image:
 
 
 def _extract_ecg_series_from_sample(sample: dict, max_leads: int = 12) -> list:
-    """Extract a list of 1D ECG lead arrays from the formatted sample.
-
-    The ECGQACoTQADataset formats samples via PromptWithAnswer.to_dict(). It typically
-    provides a list under the key `time_series_text` where each item pairs text with a
-    1D array. Items may be objects or dict-like; this function handles both.
-    """
+    """Extract 1D ECG lead arrays from a sample dict."""
     series_list = []
-    print("[DBG] Extracting ECG series from sample ...")
 
-    # Preferred structured field
     ts_items = sample.get("time_series_text") or []
-    print(f"[DBG] time_series_text items: {len(ts_items)}")
     for item in ts_items:
         arr = None
-        # dict-like
         if isinstance(item, dict):
             arr = item.get("time_series")
         else:
-            # object-like with attribute
             arr = getattr(item, "time_series", None)
         if arr is not None:
             try:
                 a = np.asarray(arr, dtype=float).reshape(-1)
                 if a.size > 0 and np.isfinite(a).all():
                     series_list.append(a)
-                    print(f"[DBG]  + lead len={a.size}")
             except Exception:
                 continue
         if len(series_list) >= max_leads:
             break
 
-    # Fallbacks: if nothing found, try generic fields used elsewhere
     if not series_list:
-        print("[DBG] No leads found in time_series_text; trying generic fields ...")
         for key in ("time_series", "original_data", "signal"):
             if key in sample and sample[key] is not None:
                 maybe = sample[key]
                 if isinstance(maybe, (list, tuple, np.ndarray)):
                     arr = np.asarray(maybe)
-                    # If 2D (leads x time), split rows; if 1D, wrap single
                     if arr.ndim == 2:
                         for i in range(min(arr.shape[0], max_leads)):
                             series_list.append(arr[i].reshape(-1))
-                            print(f"[DBG]  + fallback lead[{i}] len={arr[i].reshape(-1).size}")
                     elif arr.ndim == 1:
                         series_list.append(arr.reshape(-1))
-                        print(f"[DBG]  + fallback single lead len={arr.reshape(-1).size}")
                 break
 
-    print(f"[DBG] Extracted {len(series_list)} lead(s)")
     return series_list[:max_leads]
 
 
 def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
-    """Build chat-style messages using pre/post prompts and a composite ECG plot image.
-
-    Assistant content is the provided CoT `answer`.
-    """
+    """Build chat-style messages with ECG plot image for training."""
     pre = (sample.get("pre_prompt") or "").strip()
     post = (sample.get("post_prompt") or "").strip()
     ans = (sample.get("answer") or "").strip()
-    print("[DBG] Building messages ...")
-    print(f"[DBG]  pre_prompt len={len(pre)} post_prompt len={len(post)} answer len={len(ans)}")
 
-    # Append EOS token to answer if provided
     if eos_token:
         ans = ans + eos_token
-        print("[DBG]  appended EOS token to answer")
 
-    # Extract ECG series and make plot image
     leads = _extract_ecg_series_from_sample(sample, max_leads=12)
-    try:
-        img = _ecg_leads_to_pil(leads)
-        try:
-            w, h = img.size
-            print(f"[DBG]  image size: {w}x{h}")
-        except Exception:
-            print("[DBG]  image created (size unknown)")
-    except Exception as e:
-        print(f"[DBG][ERR] Failed to render ECG image: {e}")
-        raise
+    img = _ecg_leads_to_pil(leads)
 
-    # Include question details if present (ECG-QA specifics)
     question = sample.get("question")
     if question:
         pre_text = f"{pre}\n\nQuestion: {question}" if pre else f"Question: {question}"
@@ -169,7 +129,6 @@ def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
         pre_text = pre
 
     user_text = "\n\n".join([p for p in [pre_text, post] if p])
-    print(f"[DBG]  user_text len={len(user_text)}")
     messages = [
         {
             "role": "system",
@@ -192,7 +151,6 @@ def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
             "content": [{"type": "text", "text": ans}],
         },
     ]
-    print("[DBG] Messages built successfully")
     return {"messages": messages}
 
 
@@ -219,8 +177,6 @@ def main():
     processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
     eos_token = processor.tokenizer.eos_token
 
-    # Build training chat examples with images from ECG-QA train split
-    print(f"[DBG] Args: max_samples={args.max_samples}, exclude_comparison={args.exclude_comparison}, preload_processed_data={args.preload_processed_data}")
     ds = ECGQACoTQADataset(
         split="train",
         EOS_TOKEN="",
