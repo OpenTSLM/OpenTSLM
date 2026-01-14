@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from PIL import Image
 import io
+import wfdb
 
 # Ensure project src/ is on sys.path so we can import time_series_datasets
 PROJECT_SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
@@ -23,6 +24,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from time_series_datasets.ecg_qa.plot_example import get_ptbxl_ecg_path
 
 # Prefer local import when running from evaluation/baseline, fall back to package path
 try:
@@ -31,38 +33,82 @@ except ModuleNotFoundError:
     from evaluation.baseline.common_finetune_sft import run_sft
 
 
-def _ecg_leads_to_pil(leads: list[np.ndarray]) -> Image.Image:
-    """Render multiple ECG leads to a single PIL RGB image."""
-    ts_list = []
-    for s in leads:
-        try:
-            arr = np.asarray(s, dtype=float).reshape(-1)
-            if arr.size == 0 or not np.isfinite(arr).all():
-                continue
-            ts_list.append(arr)
-        except Exception:
-            continue
+LEAD_NAMES = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
 
-    if len(ts_list) == 0:
-        # Fallback to a blank image to avoid crashes
-        fig, ax = plt.subplots(figsize=(10, 2), dpi=100)
-        ax.text(0.5, 0.5, "No ECG data", ha="center", va="center")
-        ax.axis("off")
-        canvas = FigureCanvas(fig)
-        buf = io.BytesIO()
-        canvas.print_png(buf)
-        plt.close(fig)
-        buf.seek(0)
-        return Image.open(buf).convert("RGB")
 
-    n = len(ts_list)
-    fig, axes = plt.subplots(n, 1, figsize=(12, 1.6 * n), dpi=100, sharex=True)
+def _downsample_to_100hz(ecg_data: np.ndarray, original_freq: int) -> np.ndarray:
+    """Downsample ECG data to 100Hz"""
+    if original_freq == 100:
+        return ecg_data
+
+    # Calculate downsampling factor
+    downsample_factor = original_freq // 100
+
+    # Downsample by taking every nth sample
+    downsampled_data = ecg_data[::downsample_factor]
+
+    return downsampled_data
+
+
+def _load_ecg_data(ecg_id: int) -> np.ndarray:
+    """Load ECG data for a given ECG ID using wfdb (same as groundtruth)."""
+    ecg_path = get_ptbxl_ecg_path(ecg_id)
+
+    if not os.path.exists(ecg_path + ".dat"):
+        raise FileNotFoundError(f"ECG file not found: {ecg_path}.dat")
+
+    # Read ECG data using wfdb - returns (samples, leads) shape
+    ecg_data, meta = wfdb.rdsamp(ecg_path)
+
+    return ecg_data
+
+
+def _ecg_to_pil(ecg_data: np.ndarray) -> Image.Image:
+    """Render ECG data to a PIL RGB image (identical to groundtruth create_ecg_plot)."""
+
+    # Downsample to 100Hz if needed
+    if ecg_data.shape[0] > 1000:  # Likely 500Hz data
+        ecg_data = _downsample_to_100hz(ecg_data, 500)
+
+    n = min(ecg_data.shape[1], 12)  # Up to 12 leads
+    fig, axes = plt.subplots(n, 1, figsize=(14, 2.0 * n), dpi=100)
     if n == 1:
         axes = [axes]
-    for i, s in enumerate(ts_list):
-        axes[i].plot(s, color="black", linewidth=1.0)
-        axes[i].axis("off")
-    plt.tight_layout(pad=0.2)
+
+    # Create time array for 100Hz sampling (10 seconds)
+    time_points = np.arange(0, 10, 0.01)  # 100Hz for 10 seconds
+
+    for i in range(n):
+        ax = axes[i]
+        lead_name = LEAD_NAMES[i] if i < len(LEAD_NAMES) else f"Lead {i+1}"
+
+        # Plot the ECG signal for this lead - ecg_data is (samples, leads)
+        ax.plot(time_points, ecg_data[:, i], linewidth=2, color="k", alpha=1.0)
+
+        # Add grid lines (millimeter paper style)
+        # Major grid lines (every 0.2s and 0.5mV)
+        ax.vlines(
+            np.arange(0, 10, 0.2), -2.5, 2.5, colors="r", alpha=0.3, linewidth=0.5
+        )
+        ax.hlines(
+            np.arange(-2.5, 2.5, 0.5), 0, 10, colors="r", alpha=0.3, linewidth=0.5
+        )
+
+        # Minor grid lines (every 0.04s and 0.1mV)
+        ax.vlines(
+            np.arange(0, 10, 0.04), -2.5, 2.5, colors="r", alpha=0.1, linewidth=0.3
+        )
+        ax.hlines(
+            np.arange(-2.5, 2.5, 0.1), 0, 10, colors="r", alpha=0.1, linewidth=0.3
+        )
+
+        ax.set_xticks(np.arange(0, 11, 1.0))
+        ax.set_ylabel(f"Lead {lead_name} (mV)", fontweight="bold")
+        ax.margins(0.0)
+        ax.set_ylim(-2.5, 2.5)
+        ax.set_title(f"Lead {lead_name}", fontweight="bold", pad=10)
+
+    plt.tight_layout()
 
     canvas = FigureCanvas(fig)
     buf = io.BytesIO()
@@ -73,41 +119,18 @@ def _ecg_leads_to_pil(leads: list[np.ndarray]) -> Image.Image:
     return img
 
 
-def _extract_ecg_series_from_sample(sample: dict, max_leads: int = 12) -> list:
-    """Extract 1D ECG lead arrays from a sample dict."""
-    series_list = []
+def _get_ecg_id_from_sample(sample: dict) -> int:
+    """Extract ECG ID from a sample dict."""
+    ecg_id = sample.get("ecg_id")
+    if ecg_id is None:
+        raise ValueError("Sample missing 'ecg_id' field")
 
-    ts_items = sample.get("time_series_text") or []
-    for item in ts_items:
-        arr = None
-        if isinstance(item, dict):
-            arr = item.get("time_series")
-        else:
-            arr = getattr(item, "time_series", None)
-        if arr is not None:
-            try:
-                a = np.asarray(arr, dtype=float).reshape(-1)
-                if a.size > 0 and np.isfinite(a).all():
-                    series_list.append(a)
-            except Exception:
-                continue
-        if len(series_list) >= max_leads:
-            break
+    if isinstance(ecg_id, list):
+        if len(ecg_id) == 0:
+            raise ValueError("Sample 'ecg_id' list is empty")
+        return ecg_id[0]
 
-    if not series_list:
-        for key in ("time_series", "original_data", "signal"):
-            if key in sample and sample[key] is not None:
-                maybe = sample[key]
-                if isinstance(maybe, (list, tuple, np.ndarray)):
-                    arr = np.asarray(maybe)
-                    if arr.ndim == 2:
-                        for i in range(min(arr.shape[0], max_leads)):
-                            series_list.append(arr[i].reshape(-1))
-                    elif arr.ndim == 1:
-                        series_list.append(arr.reshape(-1))
-                break
-
-    return series_list[:max_leads]
+    return ecg_id
 
 
 def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
@@ -119,8 +142,10 @@ def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
     if eos_token:
         ans = ans + eos_token
 
-    leads = _extract_ecg_series_from_sample(sample, max_leads=12)
-    img = _ecg_leads_to_pil(leads)
+    # Load raw ECG data from wfdb (same as groundtruth)
+    ecg_id = _get_ecg_id_from_sample(sample)
+    ecg_data = _load_ecg_data(ecg_id)
+    img = _ecg_to_pil(ecg_data)
 
     question = sample.get("question")
     if question:

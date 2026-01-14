@@ -10,7 +10,6 @@ Dependencies:
 from __future__ import annotations
 import os
 from typing import List
-import io
 
 from datasets import Dataset
 from transformers import AutoModelForImageTextToText, AutoProcessor
@@ -19,6 +18,16 @@ from peft import LoraConfig
 from trl import SFTTrainer
 from trl.trainer.sft_config import SFTConfig
 from PIL import Image
+
+
+def process_vision_info(messages: list[dict]) -> list[Image.Image]:
+    """Extract PIL images from chat messages."""
+    images = []
+    for msg in messages:
+        for element in msg.get("content", []):
+            if isinstance(element, dict) and "image" in element:
+                images.append(element["image"].convert("RGB"))
+    return images
 
 
 def run_sft(
@@ -94,32 +103,6 @@ def run_sft(
         optim="adamw_8bit",
         max_grad_norm=0.3,
     )
-
-    def process_vision_info(messages: List[dict]):
-        """Extract PIL images from chat messages."""
-        image_inputs = []
-        for msg in messages:
-            content = msg.get("content", [])
-            if not isinstance(content, list):
-                content = [content]
-            for element in content:
-                if isinstance(element, dict) and (
-                    "image" in element or element.get("type") == "image"
-                ):
-                    image = element.get("image", element)
-                    if image is None:
-                        continue
-                    if isinstance(image, dict):
-                        if "bytes" in image and image["bytes"] is not None:
-                            image = Image.open(io.BytesIO(image["bytes"]))
-                        elif "path" in image and image["path"] is not None:
-                            image = Image.open(image["path"])
-                        else:
-                            continue
-                    if hasattr(image, "convert"):
-                        image = image.convert("RGB")
-                        image_inputs.append(image)
-        return image_inputs
 
     def collate_fn(examples: List[dict]):
         """Collate chat examples into a batch with masked labels."""
