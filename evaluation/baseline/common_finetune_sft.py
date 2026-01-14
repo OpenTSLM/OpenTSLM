@@ -30,24 +30,20 @@ def process_vision_info(messages: list[dict]) -> list[Image.Image]:
             content = [content]
 
         for element in content:
-            if isinstance(element, dict) and (
-                "image" in element or element.get("type") == "image"
-            ):
-                if "image" in element:
-                    image = element["image"]
-                else:
-                    image = element
+            if not isinstance(element, dict):
+                continue
 
-                if image is None:
-                    raise ValueError(f"Image is None in message element: {element}")
+            image = element.get("image")
+            if image is None:
+                continue  # Text elements get "image": None from Dataset serialization
 
-                print(f"DEBUG process_vision_info: image type={type(image)}, len={len(image) if isinstance(image, bytes) else 'N/A'}")
+            print(f"DEBUG process_vision_info: image type={type(image)}, len={len(image) if isinstance(image, bytes) else 'N/A'}")
 
-                # Handle bytes (PNG data) - convert to PIL Image
-                if isinstance(image, bytes):
-                    image = Image.open(io.BytesIO(image))
+            # Handle bytes (PNG data) - convert to PIL Image
+            if isinstance(image, bytes):
+                image = Image.open(io.BytesIO(image))
 
-                image_inputs.append(image.convert("RGB"))
+            image_inputs.append(image.convert("RGB"))
     return image_inputs
 
 
