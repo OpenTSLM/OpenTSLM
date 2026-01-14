@@ -63,8 +63,8 @@ def _load_ecg_data(ecg_id: int) -> np.ndarray:
     return ecg_data
 
 
-def _ecg_to_pil(ecg_data: np.ndarray) -> Image.Image:
-    """Render ECG data to a PIL RGB image (identical to groundtruth create_ecg_plot)."""
+def _ecg_to_bytes(ecg_data: np.ndarray) -> bytes:
+    """Render ECG data to PNG bytes (survives Dataset serialization)."""
 
     # Downsample to 100Hz if needed
     if ecg_data.shape[0] > 1000:  # Likely 500Hz data
@@ -114,9 +114,7 @@ def _ecg_to_pil(ecg_data: np.ndarray) -> Image.Image:
     buf = io.BytesIO()
     canvas.print_png(buf)
     plt.close(fig)
-    buf.seek(0)
-    img = Image.open(buf).convert("RGB")
-    return img
+    return buf.getvalue()  # Return bytes instead of PIL Image
 
 
 def _get_ecg_id_from_sample(sample: dict) -> int:
@@ -145,7 +143,7 @@ def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
     # Load raw ECG data from wfdb (same as groundtruth)
     ecg_id = _get_ecg_id_from_sample(sample)
     ecg_data = _load_ecg_data(ecg_id)
-    img = _ecg_to_pil(ecg_data)
+    img_bytes = _ecg_to_bytes(ecg_data)
 
     question = sample.get("question")
     if question:
@@ -168,7 +166,7 @@ def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
             "role": "user",
             "content": [
                 {"type": "text", "text": user_text},
-                {"type": "image", "image": img},
+                {"type": "image", "image": img_bytes},
             ],
         },
         {

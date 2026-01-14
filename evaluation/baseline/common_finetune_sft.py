@@ -8,6 +8,7 @@ Dependencies:
   transformers, datasets, peft, trl, accelerate (and bitsandbytes if you want QLoRA)
 """
 from __future__ import annotations
+import io
 import os
 from typing import List
 
@@ -21,13 +22,33 @@ from PIL import Image
 
 
 def process_vision_info(messages: list[dict]) -> list[Image.Image]:
-    """Extract PIL images from chat messages."""
-    images = []
+    """Extract PIL images from chat messages. Handles both PIL Images and bytes."""
+    image_inputs = []
     for msg in messages:
-        for element in msg.get("content", []):
-            if isinstance(element, dict) and "image" in element:
-                images.append(element["image"].convert("RGB"))
-    return images
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            content = [content]
+
+        for element in content:
+            if isinstance(element, dict) and (
+                "image" in element or element.get("type") == "image"
+            ):
+                if "image" in element:
+                    image = element["image"]
+                else:
+                    image = element
+
+                if image is None:
+                    raise ValueError(f"Image is None in message element: {element}")
+
+                print(f"DEBUG process_vision_info: image type={type(image)}, len={len(image) if isinstance(image, bytes) else 'N/A'}")
+
+                # Handle bytes (PNG data) - convert to PIL Image
+                if isinstance(image, bytes):
+                    image = Image.open(io.BytesIO(image))
+
+                image_inputs.append(image.convert("RGB"))
+    return image_inputs
 
 
 def run_sft(
@@ -41,7 +62,7 @@ def run_sft(
     gradient_accumulation_steps: int = 4,
     max_seq_len: int = 4096,
     logging_steps: int = 10,
-    save_steps: int = 10000,  # Save less frequently to save disk space
+    save_steps: int = 100,  # Save less frequently to save disk space
     bf16: bool = True,
 ) -> None:
     """Run LoRA SFT on chat-style examples (with images) and save adapters.
@@ -90,7 +111,8 @@ def run_sft(
         gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=learning_rate,
         logging_steps=logging_steps,
-        save_strategy="epoch",
+        save_strategy="steps",
+        save_steps=save_steps,
         bf16=bf16,
         report_to=[],
         dataset_text_field="",
