@@ -146,7 +146,18 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             # TODO: investigate also training the output embeddings when untied
 
         # additonally unfreeze encoder
-        model.vision_encoder.requires_grad_(True)
+        # Ensure vision_encoder is a PyTorch module (not a SimpleNamespace)
+        if hasattr(model.vision_encoder, 'requires_grad_'):
+            model.vision_encoder.requires_grad_(True)
+        else:
+            # If vision_encoder is a SimpleNamespace, extract the actual encoder
+            if hasattr(model.vision_encoder, 'visual'):
+                model.vision_encoder = model.vision_encoder.visual
+                model.vision_encoder.requires_grad_(True)
+            else:
+                raise ValueError(
+                    f"vision_encoder is not a PyTorch module. Got type: {type(model.vision_encoder)}"
+                )
 
         self.model = model
         self.llm = model
@@ -256,14 +267,20 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                     batch, include_labels=True
                 )
 
+                # Prepare generation kwargs
+                # Note: eos_token_id and pad_token_id are not passed to Flamingo.generate()
+                # as the installed open-flamingo version doesn't accept them in kwargs.
+                # The underlying language model will use its default eos_token_id.
+                generation_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    **generate_kwargs,
+                }
+                
                 gen_ids = self.llm.generate(
                     vision_x=images,
                     lang_x=input_ids,
                     attention_mask=attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    eos_token_id=self.text_tokenizer.eos_token_id,
-                    pad_token_id=self.text_tokenizer.pad_token_id,
-                    **generate_kwargs,
+                    **generation_kwargs,
                 )
 
                 # Remove input ids from generation
@@ -324,14 +341,30 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         if hasattr(self, "module"):
             model_state = {f"module.{k}": v for k, v in model_state.items()}
 
-        # Remove 'model.' prefix if present in checkpoint keys
-        if all(k.startswith("model.") for k in model_state.keys()):
-            model_state = {
-                k.replace("model.", "", 1): v for k, v in model_state.items()
-            }
+        # Remove prefixes ('model.' or 'llm.') if present in checkpoint keys
+        # The checkpoint may have been saved with keys prefixed with 'model.' or 'llm.'
+        # but the actual Flamingo model expects keys without these prefixes
+        new_model_state = {}
+        prefix_removed_count = 0
+        for k, v in model_state.items():
+            new_key = k
+            # Remove 'llm.' prefix if present (common when saved as checkpoint["llm"])
+            if new_key.startswith("llm."):
+                new_key = new_key[4:]  # Remove "llm." (4 characters)
+                prefix_removed_count += 1
+            # Remove 'model.' prefix if present
+            elif new_key.startswith("model."):
+                new_key = new_key[6:]  # Remove "model." (6 characters)
+                prefix_removed_count += 1
+            new_model_state[new_key] = v
+        model_state = new_model_state
+        
+        if prefix_removed_count > 0:
+            print(f"ℹ️  Removed prefix from {prefix_removed_count} checkpoint keys")
 
         # Load state dict with strict=False to handle missing/unexpected keys
-        missing_keys, unexpected_keys = self.load_state_dict(model_state, strict=False)
+        # The checkpoint contains state for self.model (the Flamingo model), not self
+        missing_keys, unexpected_keys = self.model.load_state_dict(model_state, strict=False)
         if missing_keys:
             print(f"⚠️  Warning: Missing keys when loading checkpoint:")
             for key in missing_keys[:10]:
