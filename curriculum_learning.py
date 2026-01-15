@@ -1678,30 +1678,46 @@ class CurriculumTrainer:
         )
 
     def _init_distributed(self):
-        """Initialize distributed training."""
-        if "WORLD_SIZE" in os.environ:
-            self.world_size = int(os.environ["WORLD_SIZE"])
-        if "RANK" in os.environ:
-            self.rank = int(os.environ["RANK"])
-        elif "LOCAL_RANK" in os.environ:
-            self.rank = int(os.environ["LOCAL_RANK"])
-
+        """Initialize distributed training for multi-node multi-GPU.
+        
+        Supports both single-node and multi-node training via torchrun.
+        Environment variables are automatically set by torchrun:
+        - MASTER_ADDR, MASTER_PORT: for inter-node communication
+        - WORLD_SIZE: total number of processes across all nodes
+        - RANK: global rank of this process
+        - LOCAL_RANK: rank within this node (GPU index)
+        """
+        # Get local_rank from environment (set by torchrun)
+        # This is the GPU index within this node
+        if "LOCAL_RANK" in os.environ:
+            self.local_rank = int(os.environ["LOCAL_RANK"])
+        
         # Initialize process group
+        # torchrun sets MASTER_ADDR, MASTER_PORT, WORLD_SIZE, RANK automatically
+        # Using init_method="env://" reads these from environment
         dist.init_process_group(
             backend=self.dist_backend,
-            init_method=self.dist_url,
-            world_size=self.world_size,
-            rank=self.rank,
+            init_method=self.dist_url,  # defaults to "env://"
             timeout=datetime.timedelta(hours=999),
         )
 
-        # Set device for this process
+        # Get global rank and world_size from initialized process group
+        # This is the correct way to get these values for multi-node training
+        self.rank = dist.get_rank()
+        self.world_size = dist.get_world_size()
+
+        # Set CUDA device based on local_rank (GPU index within this node)
         if torch.cuda.is_available():
             torch.cuda.set_device(self.local_rank)
             self.device = torch.device("cuda", self.local_rank)
 
         if self.rank == 0:
-            print(f"Initialized distributed training with {self.world_size} GPUs")
+            print(f"Initialized distributed training:")
+            print(f"  - World size: {self.world_size} (total GPUs across all nodes)")
+            print(f"  - Global rank: {self.rank}")
+            print(f"  - Local rank: {self.local_rank}")
+            if "MASTER_ADDR" in os.environ:
+                print(f"  - Master: {os.environ.get('MASTER_ADDR')}:{os.environ.get('MASTER_PORT')}")
 
     def _is_stage_completed(self, stage: str) -> bool:
         """Check if a stage is completed by verifying both training and evaluation were successful."""
