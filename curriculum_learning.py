@@ -45,6 +45,7 @@ from opentslm.model.llm.OpenTSLMSP import OpenTSLMSP
 from opentslm.model.projector.MLPProjector import MLPProjector
 import datetime
 from opentslm.logger import get_logger, set_global_verbose
+from opentslm.logging.wandb_helper import WandbHelper
 
 from opentslm.model_config import (
     BATCH_SIZE,
@@ -115,9 +116,6 @@ class CurriculumTrainer:
         llm_id: str = None,
         encoder_type: str = "chronos2",
         wandb_project: str = "opentslm-curriculum",
-        wandb_entity: str = None,
-        wandb_run_name: str = None,
-        wandb_tags: List[str] = None,
         disable_wandb: bool = False,
     ):
         """
@@ -161,12 +159,19 @@ class CurriculumTrainer:
 
         # Wandb configuration
         self.wandb_project = wandb_project
-        self.wandb_entity = wandb_entity
-        self.wandb_run_name = wandb_run_name
-        self.wandb_tags = wandb_tags or []
         self.disable_wandb = disable_wandb
-        self.wandb_run = None
-        self.wandb_initialized = False
+        self.wandb_helper = WandbHelper(
+            model_type=self.model_type,
+            llm_id=self.llm_id,
+            llm_id_safe=self.llm_id_safe,
+            encoder_type=self.encoder_type,
+            device=self.device,
+            world_size=self.world_size,
+            rank=self.rank,
+            gradient_checkpointing=self.gradient_checkpointing,
+            wandb_project=self.wandb_project,
+            disabled=self.disable_wandb,
+        )
 
         self.base_dir = os.getenv("AMLT_BLOB_ROOT_DIR")
         if self.base_dir is None:
@@ -201,122 +206,37 @@ class CurriculumTrainer:
         """Initialize wandb for tracking experiments."""
         if self.disable_wandb or (dist.is_initialized() and self.rank != 0):
             return
-
-        try:
-            # Build a fresh run name per stage without mutating the base name
-            base_run_name = self.wandb_run_name
-            if not base_run_name:
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                base_run_name = f"{self.model_type}_{self.llm_id_safe}_{timestamp}"
-
-            stage_run_name = f"{base_run_name}_{stage_name}" if stage_name else base_run_name
-
-            # Prepare tags
-            tags = self.wandb_tags.copy()
-            tags.extend([self.model_type, self.llm_id_safe])
-            if self.model_type == "OpenTSLMFlamingo":
-                tags.append(f"enc_{self.encoder_type}")
-            if stage_name:
-                tags.append(stage_name)
-            if self.world_size > 1:
-                tags.append("distributed")
-
-            # Initialize wandb
-            wandb_config = {
-                "model_type": self.model_type,
-                "llm_id": self.llm_id,
-                "device": self.device,
-                "world_size": self.world_size,
-                "rank": self.rank,
-                "gradient_checkpointing": self.gradient_checkpointing,
-                "stage": stage_name,
-            }
-            # Add encoder_type to config for OpenTSLMFlamingo
-            if self.model_type == "OpenTSLMFlamingo":
-                wandb_config["encoder_type"] = self.encoder_type
-            
-            self.wandb_run = wandb.init(
-                project=self.wandb_project,
-                entity=self.wandb_entity,
-                name=stage_run_name,
-                tags=tags,
-                resume=resume,
-                config=wandb_config,
-            )
-            self.wandb_initialized = True
-            
-            if self.rank == 0:
-                print(f"🔬 Wandb initialized: {self.wandb_run.url}")
-                
-        except Exception as e:
-            if self.rank == 0:
-                print(f"⚠️  Failed to initialize wandb: {e}")
-                print("   Continuing without wandb logging...")
-            self.disable_wandb = True
+        self.wandb_helper.init_wandb(stage_name=stage_name, resume=resume)
 
     def _log_wandb_metrics(self, metrics: Dict[str, Any], step: int = None, prefix: str = ""):
         """Log metrics to wandb."""
-        if not self.wandb_initialized or self.disable_wandb or self.wandb_run is None:
+        if self.disable_wandb:
             return
-
         try:
-            # Add prefix to metric names
-            if prefix:
-                metrics = {f"{prefix}/{k}": v for k, v in metrics.items()}
-            
-            self.wandb_run.log(metrics, step=step)
+            self.wandb_helper.log_metrics(metrics=metrics, step=step, prefix=prefix)
         except Exception as e:
             if self.rank == 0:
                 print(f"⚠️  Failed to log metrics to wandb: {e}")
 
     def _log_model_info_to_wandb(self):
         """Log model architecture and system information to wandb."""
-        if not self.wandb_initialized or self.disable_wandb:
+        if self.disable_wandb:
             return
-
         try:
-            model = self._get_model()
-            
-            # Count parameters
-            total_params = sum(p.numel() for p in model.parameters())
-            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            
-            # Log model information
-            model_info = {
-                "model/total_parameters": total_params,
-                "model/trainable_parameters": trainable_params,
-                "model/parameter_ratio": trainable_params / total_params if total_params > 0 else 0,
-                "model/model_type": self.model_type,
-                "model/llm_id": self.llm_id,
-                "system/device": self.device,
-                "system/world_size": self.world_size,
-                "system/rank": self.rank,
-            }
-            
-            # Add GPU memory info if available
-            if torch.cuda.is_available():
-                model_info.update({
-                    "system/gpu_memory_allocated": torch.cuda.memory_allocated() / 1024**3,  # GB
-                    "system/gpu_memory_reserved": torch.cuda.memory_reserved() / 1024**3,   # GB
-                    "system/gpu_count": torch.cuda.device_count(),
-                })
-            
-            self.wandb_run.log(model_info, step=0)
-            
+            self.wandb_helper.log_model_info(self._get_model())
         except Exception as e:
             if self.rank == 0:
                 print(f"⚠️  Failed to log model info to wandb: {e}")
 
     def _finish_wandb(self):
         """Finish wandb run."""
-        if self.wandb_initialized and not self.disable_wandb and self.wandb_run is not None:
-            try:
-                self.wandb_run.finish()
-                self.wandb_initialized = False
-                self.wandb_run = None
-            except Exception as e:
-                if self.rank == 0:
-                    print(f"⚠️  Failed to finish wandb run: {e}")
+        if self.disable_wandb:
+            return
+        try:
+            self.wandb_helper.finish()
+        except Exception as e:
+            if self.rank == 0:
+                print(f"⚠️  Failed to finish wandb run: {e}")
 
     def _initialize_model(self):
         """Initialize the specified model type."""
@@ -1160,7 +1080,7 @@ class CurriculumTrainer:
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
         
         # Update wandb config with learning rates after optimizer is created
-        if self.wandb_initialized and not self.disable_wandb and self.wandb_run is not None:
+        if self.wandb_helper.initialized and not self.disable_wandb:
             try:
                 lr_config = {}
                 if self.model_type == "OpenTSLMSP":
@@ -1181,7 +1101,7 @@ class CurriculumTrainer:
                 lr_config["batch_size"] = batch_size
                 lr_config["num_epochs"] = num_epochs
                 
-                self.wandb_run.config.update(lr_config)
+                self.wandb_helper.update_config(lr_config)
             except Exception as e:
                 if self.rank == 0:
                     print(f"⚠️  Failed to update wandb config with learning rates: {e}")
@@ -1933,24 +1853,6 @@ def main():
         help="Weights & Biases project name",
     )
     parser.add_argument(
-        "--wandb_entity",
-        type=str,
-        default=None,
-        help="Weights & Biases entity/team name",
-    )
-    parser.add_argument(
-        "--wandb_run_name",
-        type=str,
-        default=None,
-        help="Custom run name for wandb",
-    )
-    parser.add_argument(
-        "--wandb_tags",
-        nargs="+",
-        default=[],
-        help="Tags for experiment organization",
-    )
-    parser.add_argument(
         "--disable_wandb",
         default=False,
         action="store_true",
@@ -1962,7 +1864,9 @@ def main():
     set_global_verbose(args.verbose)
     logger = get_logger(verbose=args.verbose)
 
-    wandb.login(key=os.environ["WANDB_API_KEY"], relogin=True)
+    if not args.disable_wandb and os.environ.get("WANDB_API_KEY"):
+        wandb.login(key=os.environ["WANDB_API_KEY"], relogin=True)
+
     # Initialize trainer
     trainer = CurriculumTrainer(
         args.model,
@@ -1974,9 +1878,6 @@ def main():
         llm_id=args.llm_id,
         encoder_type=args.encoder_type,
         wandb_project=args.wandb_project,
-        wandb_entity=args.wandb_entity,
-        wandb_run_name=args.wandb_run_name,
-        wandb_tags=args.wandb_tags,
         disable_wandb=args.disable_wandb,
     )
 
