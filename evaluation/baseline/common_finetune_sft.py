@@ -70,7 +70,7 @@ def _ecg_to_image(ecg_data: np.ndarray) -> Image.Image:
         ecg_data = _downsample_to_100hz(ecg_data, 500)
 
     n = min(ecg_data.shape[1], 12)  # Up to 12 leads
-    fig, axes = plt.subplots(n, 1, figsize=(14, 2.0 * n), dpi=100)
+    fig, axes = plt.subplots(n, 1, figsize=(10.5, 1.5 * n), dpi=80)
     if n == 1:
         axes = [axes]
 
@@ -163,7 +163,7 @@ def run_sft(
     gradient_accumulation_steps: int = 4,
     max_seq_len: int = 4096,
     logging_steps: int = 10,
-    save_steps: int = 100,  # Save less frequently to save disk space
+    save_steps: int = 500,  # Save less frequently to save disk space
     bf16: bool = True,
 ) -> None:
     """Run LoRA SFT on chat-style examples (with images) and save adapters.
@@ -189,7 +189,7 @@ def run_sft(
 
     model = AutoModelForImageTextToText.from_pretrained(
         llm_id,
-        attn_implementation="eager",
+        attn_implementation="flash_attention_2",
         torch_dtype=torch.bfloat16,
         device_map="auto",
         low_cpu_mem_usage=True,

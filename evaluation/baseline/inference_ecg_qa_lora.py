@@ -36,7 +36,7 @@ def load_model_and_processor(base_model_id: str, lora_adapter_path: str = None):
 
     model = AutoModelForImageTextToText.from_pretrained(
         base_model_id,
-        attn_implementation="eager",
+        attn_implementation="flash_attention_2",
         torch_dtype=torch.bfloat16,
         device_map="auto",
         low_cpu_mem_usage=True,
