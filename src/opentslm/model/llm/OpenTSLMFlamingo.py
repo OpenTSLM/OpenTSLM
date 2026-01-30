@@ -184,8 +184,6 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             model.lang_encoder.get_input_embeddings().requires_grad_(True)
             # TODO: investigate also training the output embeddings when untied
 
-        # print(type(model.vision_encoder), model.vision_encoder)
-        # print(dir(model.vision_encoder))
         # additonally unfreeze encoder
         model.vision_encoder.requires_grad_(True)
 

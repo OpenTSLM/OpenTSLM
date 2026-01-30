@@ -173,12 +173,7 @@ class CurriculumTrainer:
             disabled=self.disable_wandb,
         )
 
-        self.base_dir = os.getenv("AMLT_BLOB_ROOT_DIR")
-        if self.base_dir is None:
-            print('AMLT_BLOB_ROOT_DIR is not set, likely we are using development mode, using current directory')
-            self.base_dir = os.getcwd()
-        else:
-            self.base_dir = os.path.join(self.base_dir, "juncheng","OpenTSLM")
+        self.base_dir = os.getcwd()
         
         # Build results directory path
         # For OpenTSLMFlamingo, include encoder_type and training timestamp in the path
