@@ -327,6 +327,7 @@ This work was made possible through the collaborative efforts of an interdiscipl
 - Winnie Chow (Stanford University)
 - Martin Maritsch (Amazon)
 - Robert Jakob (ETH Zurich, ETH Agentic Systems Lab)
+- Ning Wang (ETH Zurich, ETH Agentic Systems Lab)
 - Aradhana Verma (Stanford University)
 - Brian Han (Stanford University)
 - Daniel Seung Kim (University of Washington)
