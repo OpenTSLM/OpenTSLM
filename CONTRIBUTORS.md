@@ -12,6 +12,6 @@ SPDX-License-Identifier: MIT
 * [Max Rosenblattl](https://github.com/max-rosenblattl)
 * [Maxwell A. Xu](https://github.com/maxxu05)
 * [Winnie Chow](https://github.com/winnie0617)
-* [Ning Wang](https://github.com/numericunderflow06)
 * [Martin Maritsch](https://github.com/masquare)
+* [Ning Wang](https://github.com/numericunderflow06)
 * [Paul Schmiedmayer](https://github.com/PSchmiedmayer)
