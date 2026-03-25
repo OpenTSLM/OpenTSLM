@@ -1,10 +1,7 @@
-#
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 import re
 import sys
@@ -16,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from common_evaluator_plot import CommonEvaluatorPlot
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 
 def extract_label_from_text(text: str) -> str:

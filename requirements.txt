@@ -1,23 +1,36 @@
-numpy
-pandas
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
+#
+# SPDX-License-Identifier: MIT
+
+
 azure-storage-blob
-python-dotenv
-torch 
+python-dotenv 
 joblib
 argparse
-tqdm
-matplotlib
-scikit-learn
 torchinfo
 transformers
 chronos-forecasting
-huggingface-hub
 datasets
 peft
 requests
 open-clip-torch
-einops
 einops-exts
 pyvim
 openai
 wfdb
+numpy>=2.3.5
+pandas>=2.3.3
+torch>=2.9.1
+tqdm>=4.67.1
+matplotlib>=3.10.7
+scikit-learn>=1.7.2
+transformers>=4.57.3
+huggingface-hub>=0.36.0
+datasets>=4.4.1
+peft>=0.18.0
+requests>=2.32.5
+einops>=0.8.1
+wfdb>=4.3.0
+open-flamingo>=0.0.2
+-e .

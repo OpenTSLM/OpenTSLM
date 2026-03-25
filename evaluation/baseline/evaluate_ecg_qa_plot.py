@@ -1,10 +1,7 @@
-#
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 import re
 import sys
@@ -17,7 +14,7 @@ from typing import Dict, Any, List, Optional
 import matplotlib.pyplot as plt
 
 from common_evaluator_plot import CommonEvaluatorPlot
-from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 
 
 def extract_answer(text: str) -> str:

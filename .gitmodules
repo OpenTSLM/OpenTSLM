@@ -1,6 +1,0 @@
-[submodule "open_flamingo"]
-	path = open_flamingo
-	url = https://github.com/mlfoundations/open_flamingo.git
-[submodule "src/open_flamingo"]
-	path = src/open_flamingo
-	url = https://github.com/mlfoundations/open_flamingo.git

@@ -1,27 +1,21 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """
 Test script for the ECG-QA CoT loader and dataset.
 """
 
 import unittest
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', "src"))
-
-# Import and set up global logger with verbose mode
-from logger import get_logger, set_global_verbose
+from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from opentslm.logger import get_logger, set_global_verbose
 
 def pretty_print_label_distribution(dataset, name):
     """Pretty print label distribution for a dataset."""
-    from time_series_datasets.ecg_qa.ecgqa_cot_loader import get_label_distribution
+    from opentslm.time_series_datasets.ecg_qa.ecgqa_cot_loader import get_label_distribution
     label_dist = get_label_distribution(dataset)
     total = len(dataset)
     print(f"\n{name} dataset:")
@@ -39,7 +33,7 @@ class TestECGQACotLoader(unittest.TestCase):
         set_global_verbose(True)
         self.logger = get_logger()
         
-        from time_series_datasets.ecg_qa.ecgqa_cot_loader import load_ecg_qa_cot_splits
+        from opentslm.time_series_datasets.ecg_qa.ecgqa_cot_loader import load_ecg_qa_cot_splits
         self.load_ecg_qa_cot_splits = load_ecg_qa_cot_splits
         
         self.logger.loading("Loading ECG-QA CoT dataset splits...")
@@ -61,7 +55,7 @@ class TestECGQACotLoader(unittest.TestCase):
         pretty_print_label_distribution(self.val, "Validation")
         pretty_print_label_distribution(self.test, "Test")
         
-        from time_series_datasets.ecg_qa.ecgqa_cot_loader import get_label_distribution
+        from opentslm.time_series_datasets.ecg_qa.ecgqa_cot_loader import get_label_distribution
         train_dist = get_label_distribution(self.train)
         val_dist = get_label_distribution(self.val)
         test_dist = get_label_distribution(self.test)
@@ -193,7 +187,7 @@ class TestECGQACoTQADataset(unittest.TestCase):
         set_global_verbose(True)
         self.logger = get_logger()
         
-        from time_series_datasets.ecg_qa import ECGQACoTQADataset
+        from opentslm.time_series_datasets.ecg_qa import ECGQACoTQADataset
         self.ECGQACoTQADataset = ECGQACoTQADataset
         
         self.logger.loading("Initializing ECGQACoTQADataset...")
@@ -388,7 +382,7 @@ class TestECGQACoTQADataset(unittest.TestCase):
         self.logger.info("Testing error handling for missing fields...")
         
         # Create a sample with missing fields to test error handling
-        from time_series_datasets.ecg_qa import ECGQACoTQADataset
+        from opentslm.time_series_datasets.ecg_qa import ECGQACoTQADataset
         
         # This should work normally
         try:

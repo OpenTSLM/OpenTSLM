@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """
 Test script for the M4QADataset with caption generation.
 """
 
 import unittest
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', "src"))
+from opentslm.time_series_datasets.m4.M4QADataset import M4QADataset as _M4QADataset
 
 class TestM4QADataset(unittest.TestCase):
     """
     Unit tests for the M4QADataset class and loader.
     """
     def setUp(self):
-        from time_series_datasets.m4.M4QADataset import M4QADataset
-        self.M4QADataset = M4QADataset
+        self.M4QADataset = _M4QADataset
         self.train_dataset = self.M4QADataset("train", "")
         self.val_dataset = self.M4QADataset("validation", "")
         self.test_dataset = self.M4QADataset("test", "")

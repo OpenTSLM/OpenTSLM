@@ -1,25 +1,22 @@
-#
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 import json
 from typing import List
-from time_series_datasets.TSQADataset import TSQADataset
-from time_series_datasets.monash.MonashSPO2QADataset import MonashSPO2QADataset
-from time_series_datasets.util import (
+from opentslm.time_series_datasets.TSQADataset import TSQADataset
+from opentslm.time_series_datasets.monash.MonashSPO2QADataset import MonashSPO2QADataset
+from opentslm.time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
 import torch
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
-from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
-from src.model_config import (
+from opentslm.model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
+from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from opentslm.model_config import (
     PATCH_SIZE,
     RESULTS_FILE,
 )

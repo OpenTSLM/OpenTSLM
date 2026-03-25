@@ -1,6 +1,6 @@
 version = 1
 
 [[annotations]]
-path = ["assets/**", "data/**", "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.gif", "**/*.svg", "**/*.ico", "**/*.pt", "**/*.jsonl", "**/*.json", ".gitignore", ".gitmodules", "**/.gitignore", "LICENSE.md", "requirements.txt", ".env.example"]
+path = ["assets/**", "data/**", "**/*.png", "*.svg", "*.png", "**/*.pt", "**/*.jsonl", "**/*.json", ".gitignore", "**/uv.lock", "LICENSE.md", "**/requirements.txt"]
 SPDX-FileCopyrightText = "2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)"
 SPDX-License-Identifier = "MIT"

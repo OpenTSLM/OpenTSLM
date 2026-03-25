@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """
 Test script for ECG-QA dataset implementation.
@@ -19,17 +17,14 @@ This script tests:
 Usage:
     python test_ecgqa.py
 """
+import sys
 
-import sys
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', "src"))
 def test_ecgqa_loader():
     """Test the ECG-QA loader functions."""
     print("Testing ECG-QA loader...")
     
     try:
-        from time_series_datasets.ecg_qa.ecgqa_loader import (
+        from opentslm.time_series_datasets.ecg_qa.ecgqa_loader import (
             does_ecg_qa_exist, 
             does_ptbxl_exist,
             download_ecg_qa_if_not_exists,
@@ -58,7 +53,7 @@ def test_ecgqa_dataset():
     print("\nTesting ECGQADataset...")
     
     try:
-        from time_series_datasets.ecg_qa.ECGQADataset import ECGQADataset
+        from opentslm.time_series_datasets.ecg_qa.ECGQADataset import ECGQADataset
         
         # Try to create dataset instances with limited samples for faster testing
         print("Creating dataset instances (limited to 5 samples each for testing)...")

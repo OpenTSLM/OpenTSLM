@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """
 Test script for the HAR CoT loader and dataset.
 """
 
 import unittest
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', "src"))
 
 # Import and set up global logger with verbose mode
-from logger import get_logger, set_global_verbose
+from opentslm.logger import get_logger, set_global_verbose
 
 def pretty_print_label_distribution(dataset, name):
     """Pretty print label distribution for a dataset."""
-    from time_series_datasets.har_cot.har_cot_loader import get_label_distribution
+    from opentslm.time_series_datasets.har_cot.har_cot_loader import get_label_distribution
     label_dist = get_label_distribution(dataset)
     total = len(dataset)
     print(f"\n{name} dataset:")
@@ -39,7 +34,7 @@ class TestHARCoTLoader(unittest.TestCase):
         set_global_verbose(True)
         self.logger = get_logger()
         
-        from time_series_datasets.har_cot.har_cot_loader import load_har_cot_splits
+        from opentslm.time_series_datasets.har_cot.har_cot_loader import load_har_cot_splits
         self.load_har_cot_splits = load_har_cot_splits
         
         self.logger.loading("Loading HAR CoT dataset splits...")
@@ -61,7 +56,7 @@ class TestHARCoTLoader(unittest.TestCase):
         pretty_print_label_distribution(self.val, "Validation")
         pretty_print_label_distribution(self.test, "Test")
         
-        from time_series_datasets.har_cot.har_cot_loader import get_label_distribution
+        from opentslm.time_series_datasets.har_cot.har_cot_loader import get_label_distribution
         train_dist = get_label_distribution(self.train)
         val_dist = get_label_distribution(self.val)
         test_dist = get_label_distribution(self.test)
@@ -151,7 +146,7 @@ class TestHARCoTQADataset(unittest.TestCase):
         set_global_verbose(True)
         self.logger = get_logger()
         
-        from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+        from opentslm.time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
         self.HARCoTQADataset = HARCoTQADataset
         
         self.logger.loading("Initializing HARCoTQADataset...")

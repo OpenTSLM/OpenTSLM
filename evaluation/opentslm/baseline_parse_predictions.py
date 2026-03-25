@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """Parser for converting baseline JSON files to clean format."""
 
@@ -17,12 +15,8 @@ from pathlib import Path
 from collections import Counter
 from tqdm import tqdm
 
-# Add the src directory to the path to import from the dataset class
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.append(os.path.join(project_root, "src"))
-
 # Import the dataset class to get labels
-from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+from opentslm.time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 
 # Get the supported labels from the dataset class
 SUPPORTED_LABELS = HARCoTQADataset.get_labels()

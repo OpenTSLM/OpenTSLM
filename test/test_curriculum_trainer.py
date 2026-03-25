@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """
 Test script for the curriculum learning implementation.
@@ -17,10 +15,8 @@ import os
 import sys
 import torch
 import json
-from unittest.mock import Mock, patch
 
 # Add the parent directory to the path to import curriculum_learning
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from curriculum_learning import CurriculumTrainer
 

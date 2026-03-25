@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
+#
+# SPDX-License-Identifier: MIT
+
+name: "Publish to PyPI"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target'
+        required: true
+        default: 'PyPI'
+        type: choice
+        options:
+        - PyPI
+        - TestPyPI
+  # push:
+  #   tags:
+  #     # Publish on any tag starting with a `v`, e.g., v0.1.0
+  #     - v*
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+run-name: Publish to ${{ inputs.target }}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Verify branch
+        run: |
+          echo "Branch name is $BRANCH_NAME"
+          if [ "${{ inputs.target }}" == "PyPI" ] && [ "$BRANCH_NAME" != "main" ]; then
+            echo "::error title=Invalid branch::Only the main branch can be published to PyPI."
+            exit 1
+          fi
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Build
+        run: uv build
+      # Check that basic features work and we didn't miss to include crucial files
+      - name: Smoke test (wheel)
+        run: uv run --isolated --no-project --with dist/*.whl test/smoke_test.py
+      - name: Smoke test (source distribution)
+        run: uv run --isolated --no-project --with dist/*.tar.gz test/smoke_test.py
+      - name: Publish
+        run: uv publish ${{ inputs.target == 'TestPyPI' && '--index testpypi' || '' }}
+      - name: Summary
+        run: |
+          echo "### Published OpenTSLM to ${{ inputs.target }} :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "Version: `$(uv version --short)`" >> $GITHUB_STEP_SUMMARY
+          echo "URL: https://${{ inputs.target == 'TestPyPI' && 'test.' || '' }}pypi.org/project/opentslm/$(uv version --short)/" >> $GITHUB_STEP_SUMMARY

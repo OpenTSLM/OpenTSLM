@@ -1,16 +1,11 @@
-#
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 import argparse
 import csv
 import os
-import sys
-import time
 from datetime import datetime
 from typing import Dict, List, Tuple
 
@@ -22,31 +17,22 @@ import psutil
 
 import pynvml  # type: ignore
 
-_NVML_AVAILABLE = True
-
-
-# Ensure src is on path
-REPO_DIR = os.path.dirname(os.path.abspath(__file__))
-if REPO_DIR not in sys.path:
-    sys.path.append(REPO_DIR)
-SRC_DIR = os.path.join(REPO_DIR, "src")
-if SRC_DIR not in sys.path:
-    sys.path.append(SRC_DIR)
 
 # Models
-from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
-from model.llm.OpenTSLMSP import OpenTSLMSP
+from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from opentslm.model.llm.OpenTSLMSP import OpenTSLMSP
 
 # Datasets
-from time_series_datasets.TSQADataset import TSQADataset
-from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
-from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
-from time_series_datasets.simulation.SimulationQADataset import SimulationQADataset
-from time_series_datasets.util import (
+from opentslm.time_series_datasets.TSQADataset import TSQADataset
+from opentslm.time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from opentslm.time_series_datasets.simulation.SimulationQADataset import SimulationQADataset
+from opentslm.time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
 
+_NVML_AVAILABLE = True
 
 def get_device(device_arg: str | None) -> str:
     if device_arg:

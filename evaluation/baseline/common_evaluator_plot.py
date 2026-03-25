@@ -1,14 +1,9 @@
-#
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
-import os
 import io
-import sys
 import base64
 from typing import Type, Callable, Dict, List, Any, Optional
 
@@ -21,12 +16,7 @@ from time import sleep
 from PIL import Image
 import pandas as pd
 
-# Add src to path
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
-)
 
-# Import OpenAIPipeline
 from openai_pipeline import OpenAIPipeline
 from common_evaluator import CommonEvaluator
 

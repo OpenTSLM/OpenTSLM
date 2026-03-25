@@ -1,16 +1,13 @@
-#
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 from typing import Dict, Any, Callable
 from common_evaluator import CommonEvaluator
-from time_series_datasets.TSQADataset import TSQADataset
-from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
-from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+from opentslm.time_series_datasets.TSQADataset import TSQADataset
+from opentslm.time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
+from opentslm.time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
 
 # Import evaluation functions
 from evaluate_tsqa import evaluate_tsqa

@@ -1,23 +1,16 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """
 Test script to verify MedGemma support in OpenTSLMFlamingo.
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
-
 import torch
-from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
 
 
 def test_medgemma_support():

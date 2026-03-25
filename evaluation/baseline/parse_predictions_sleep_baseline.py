@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """
 Parse sleep baseline evaluation results from a structured JSON file and compute
@@ -43,20 +41,10 @@ import argparse
 import json
 from pathlib import Path
 from typing import Dict, List
-import sys
-
-# Ensure repository root is on sys.path so 'evaluation' package is importable
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-# Also ensure 'src' is on sys.path if needed in the future
-SRC_ROOT = REPO_ROOT / "src"
-if str(SRC_ROOT) not in sys.path:
-    sys.path.insert(0, str(SRC_ROOT))
 
 # --- Inline minimal utilities (avoid importing modules that require extra packages) ---
 import re
+
 
 def extract_answer(text: str) -> str:
     """Extract the final answer from text by taking content after 'Answer:'
@@ -65,21 +53,21 @@ def extract_answer(text: str) -> str:
     if "Answer: " not in text:
         return text
     answer = text.split("Answer: ")[-1].strip()
-    answer = re.sub(r'<\|.*?\|>$', '', answer).strip()
+    answer = re.sub(r"<\|.*?\|>$", "", answer).strip()
     return answer
 
 
 def calculate_f1_score(prediction: str, ground_truth: str):
     """Binary exact-match F1 on normalized strings (lower/strip/punct)."""
-    pred_normalized = prediction.lower().strip().rstrip('.,!?;:')
-    truth_normalized = ground_truth.lower().strip().rstrip('.,!?;:')
+    pred_normalized = prediction.lower().strip().rstrip(".,!?;:")
+    truth_normalized = ground_truth.lower().strip().rstrip(".,!?;:")
     f1 = 1.0 if pred_normalized == truth_normalized else 0.0
     return {
-        'f1_score': f1,
-        'precision': f1,
-        'recall': f1,
-        'prediction_normalized': pred_normalized,
-        'ground_truth_normalized': truth_normalized,
+        "f1_score": f1,
+        "precision": f1,
+        "recall": f1,
+        "prediction_normalized": pred_normalized,
+        "ground_truth_normalized": truth_normalized,
     }
 
 
@@ -122,7 +110,11 @@ def calculate_f1_stats(data_points: List[Dict], allowed_labels=None):
         tp, fp, fn = counts["tp"], counts["fp"], counts["fn"]
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        f1 = (
+            2 * (precision * recall) / (precision + recall)
+            if (precision + recall) > 0
+            else 0.0
+        )
         class_f1_scores[class_name] = {
             "f1": f1,
             "precision": precision,
@@ -186,8 +178,8 @@ def canonicalize_sleep_label(s: str) -> str:
 
     # If it's an option-like artifact (e.g., "(a) wake"), keep only the label part
     # but since SleepEDF doesn't use options, just strip leading option markers if present
-    if len(t) > 3 and t[0] == '(' and ')' in t[:4]:
-        t = t.split(')', 1)[-1].strip()
+    if len(t) > 3 and t[0] == "(" and ")" in t[:4]:
+        t = t.split(")", 1)[-1].strip()
 
     # Short aliases
     if t in {"w"}:
@@ -290,18 +282,18 @@ def extract_structured_data(obj: Dict) -> List[Dict]:
 
         # Binary exact-match accuracy on normalized labels handled in calculate_f1_score, but keep explicit flag
         f1_result = calculate_f1_score(model_prediction, ground_truth)
-        accuracy = f1_result['f1_score'] == 1.0
+        accuracy = f1_result["f1_score"] == 1.0
 
         data_point = {
             "generated": generated,
             "model_prediction": model_prediction,
             "ground_truth": ground_truth,
             "accuracy": accuracy,
-            "f1_score": f1_result['f1_score'],
-            "precision": f1_result['precision'],
-            "recall": f1_result['recall'],
-            "prediction_normalized": f1_result['prediction_normalized'],
-            "ground_truth_normalized": f1_result['ground_truth_normalized'],
+            "f1_score": f1_result["f1_score"],
+            "precision": f1_result["precision"],
+            "recall": f1_result["recall"],
+            "prediction_normalized": f1_result["prediction_normalized"],
+            "ground_truth_normalized": f1_result["ground_truth_normalized"],
         }
         data_points.append(data_point)
 
@@ -316,16 +308,16 @@ def main():
         "--detailed-json",
         type=Path,
         required=True,
-        help="Path to a single results JSON file containing 'detailed_results'"
+        help="Path to a single results JSON file containing 'detailed_results'",
     )
     ap.add_argument(
         "--clean-out",
         type=Path,
-        help="Optional path to write clean JSONL of parsed per-sample points"
+        help="Optional path to write clean JSONL of parsed per-sample points",
     )
     args = ap.parse_args()
 
-    with args.detailed_json.open('r', encoding='utf-8') as f:
+    with args.detailed_json.open("r", encoding="utf-8") as f:
         obj = json.load(f)
 
     # Extract per-sample points
@@ -374,9 +366,9 @@ def main():
     print(f"Macro-F1 Score: {f1_stats.get('macro_f1', 0.0):.4f}")
     print(f"Total Classes: {f1_stats.get('total_classes', 0)}")
 
-    if f1_stats.get('class_f1_scores'):
+    if f1_stats.get("class_f1_scores"):
         print(f"\nPer-Class F1 Scores:")
-        for class_name, scores in f1_stats['class_f1_scores'].items():
+        for class_name, scores in f1_stats["class_f1_scores"].items():
             print(
                 f"  {class_name}: F1={scores['f1']:.4f}, "
                 f"P={scores['precision']:.4f}, R={scores['recall']:.4f}"
@@ -384,7 +376,7 @@ def main():
 
     # Optional clean JSONL output
     if args.clean_out:
-        with args.clean_out.open('w', encoding='utf-8') as f:
+        with args.clean_out.open("w", encoding="utf-8") as f:
             for item in data_points:
                 f.write(json.dumps(item, indent=2) + "\n")
         print(f"\nData saved to {args.clean_out}")

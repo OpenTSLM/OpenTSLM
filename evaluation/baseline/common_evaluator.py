@@ -1,10 +1,7 @@
-#
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 import json
 import os
@@ -23,13 +20,9 @@ from transformers.pipelines import pipeline
 import matplotlib.pyplot as plt
 from time import sleep
 
-# Add src to path
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
-)
+from opentslm.logger import get_logger
 
-# Import OpenAIPipeline
-from openai_pipeline import OpenAIPipeline
+from .openai_pipeline import OpenAIPipeline
 
 
 class CommonEvaluator:
@@ -103,7 +96,7 @@ class CommonEvaluator:
         print(f"Loading dataset: {dataset_class.__name__}")
 
         # Import the gruver formatters
-        from gruver_llmtime_tokenizer import gpt_formatter, llama_formatter
+        from .gruver_llmtime_tokenizer import gpt_formatter, llama_formatter
 
         # Choose formatter based on model type
         model_name = getattr(self, "current_model_name", None)
@@ -498,9 +491,9 @@ class CommonEvaluator:
                 "dataset_name": dataset_name,
                 "total_samples": total_samples,
                 "successful_inferences": successful_inferences,
-                "success_rate": successful_inferences / total_samples
-                if total_samples > 0
-                else 0.0,
+                "success_rate": (
+                    successful_inferences / total_samples if total_samples > 0 else 0.0
+                ),
                 "metrics": aggregate_metrics,
                 "detailed_results": individual_results,
             }
@@ -530,9 +523,6 @@ class CommonEvaluator:
         )
 
         if os.path.exists(jsonl_file):
-            count = 0
-            with open(jsonl_file, "r") as f:
-                for line in f:
                     if line.strip():
                         count += 1
             return count

@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """
 Script to create doctor evaluation dataset with correct model predictions.
@@ -15,22 +13,17 @@ and creates organized folders with ECG plots, CSV data, and evaluation materials
 
 import json
 import os
-import sys
 import re
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import wfdb
-from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Tuple
 from collections import defaultdict
 from tqdm import tqdm
-import shutil
 
-# Add the src directory to the path
-sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
-from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
-from time_series_datasets.ecg_qa.plot_example import draw_ecg, get_ptbxl_ecg_path
+from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from opentslm.time_series_datasets.ecg_qa.plot_example import get_ptbxl_ecg_path
 
 # Configuration
 MODEL_PREDICTIONS_FILE = "/Users/planger/Development/EmbedHealth/evaluation/opentslm/ecg_qa_cot/llama3b_flamingo_predictions.jsonl"

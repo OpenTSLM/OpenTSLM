@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-#
-# This source file is part of the OpenTSLM open-source project
-#
+
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 """
 Parse baseline evaluation results and compute macro-F1 from detailed per-sample outputs.
@@ -15,13 +13,6 @@ import argparse
 import json
 from pathlib import Path
 from typing import Dict, List
-
-import sys
-
-# Ensure repository root is on sys.path so 'evaluation' package is importable
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 from evaluation.opentslm.parse_predictions import (
     calculate_f1_score,
