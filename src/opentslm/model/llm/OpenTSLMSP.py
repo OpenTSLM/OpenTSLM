@@ -46,7 +46,11 @@ class OpenTSLMSP(TimeSeriesLLM):
             device_map={"": device},
             attn_implementation="eager",
         )
-        self.llm.resize_token_embeddings(len(self.tokenizer))
+        # Avoid Transformers' mean-based resize path, which can trip on meta tensors
+        # during low-memory model initialization in production worker environments.
+        self.llm.resize_token_embeddings(
+            len(self.tokenizer), mean_resizing=False
+        )
 
         # 3) encoder + projector (now internal)
         self.encoder = TransformerCNNEncoder().to(device)

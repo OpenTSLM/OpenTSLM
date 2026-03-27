@@ -114,7 +114,11 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
 
         decoder_layers_attr_name = _infer_decoder_layers_attr_name(lang_encoder)
         lang_encoder.set_decoder_layers_attr_name(decoder_layers_attr_name)
-        lang_encoder.resize_token_embeddings(len(text_tokenizer))
+        # Avoid Transformers' mean-based resize path, which can trip on meta tensors
+        # during low-memory model initialization in production worker environments.
+        lang_encoder.resize_token_embeddings(
+            len(text_tokenizer), mean_resizing=False
+        )
 
         # Fix compatibility for Gemma3Config which has hidden_size in text_config
         if hasattr(lang_encoder.config, "text_config") and hasattr(

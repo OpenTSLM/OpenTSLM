@@ -237,3 +237,110 @@ def test_flamingo_stream_generate_clears_conditioned_layers_on_error(monkeypatch
         list(model.stream_generate([{"sample": 1}]))
 
     assert clear_calls == ["cleared"]
+
+
+def test_sp_init_disables_mean_resizing(monkeypatch):
+    resize_calls = []
+
+    class FakeTokenizer:
+        pad_token = None
+        eos_token = "</s>"
+
+        def __len__(self):
+            return 11
+
+    class FakeLLM:
+        config = SimpleNamespace(hidden_size=8)
+
+        def resize_token_embeddings(self, size, **kwargs):
+            resize_calls.append((size, kwargs))
+
+        def parameters(self):
+            return []
+
+    monkeypatch.setattr(
+        sp_module.AutoTokenizer,
+        "from_pretrained",
+        lambda *args, **kwargs: FakeTokenizer(),
+    )
+    monkeypatch.setattr(
+        sp_module.AutoModelForCausalLM,
+        "from_pretrained",
+        lambda *args, **kwargs: FakeLLM(),
+    )
+    monkeypatch.setattr(
+        sp_module,
+        "TransformerCNNEncoder",
+        lambda: torch.nn.Identity(),
+    )
+    monkeypatch.setattr(
+        sp_module,
+        "MLPProjector",
+        lambda *args, **kwargs: torch.nn.Identity(),
+    )
+
+    OpenTSLMSP(llm_id="dummy", device="cpu")
+
+    assert resize_calls == [(11, {"mean_resizing": False})]
+
+
+def test_flamingo_init_disables_mean_resizing(monkeypatch):
+    resize_calls = []
+
+    class FakeTokenizer:
+        pad_token = None
+
+        def add_special_tokens(self, mapping):
+            if "pad_token" in mapping:
+                self.pad_token = mapping["pad_token"]
+
+        def encode(self, value):
+            return [1]
+
+        def __len__(self):
+            return 13
+
+    class GemmaForCausalLM:
+        config = SimpleNamespace(hidden_size=8)
+
+        def resize_token_embeddings(self, size, **kwargs):
+            resize_calls.append((size, kwargs))
+
+        def set_decoder_layers_attr_name(self, value):
+            self.decoder_layers_attr_name = value
+
+    class FakeFlamingoModel(torch.nn.Module):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+            self.perceiver = torch.nn.Linear(1, 1)
+            self.vision_encoder = torch.nn.Linear(1, 1)
+            self.lang_encoder = SimpleNamespace(
+                gated_cross_attn_layers=torch.nn.Linear(1, 1),
+                get_input_embeddings=lambda: torch.nn.Embedding(2, 2),
+            )
+
+    monkeypatch.setattr(
+        flamingo_module.AutoTokenizer,
+        "from_pretrained",
+        lambda *args, **kwargs: FakeTokenizer(),
+    )
+    monkeypatch.setattr(
+        flamingo_module.AutoModelForCausalLM,
+        "from_pretrained",
+        lambda *args, **kwargs: GemmaForCausalLM(),
+    )
+    monkeypatch.setattr(
+        flamingo_module,
+        "CNNTokenizer",
+        lambda: torch.nn.Identity(),
+    )
+    monkeypatch.setattr(flamingo_module, "extend_instance", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        flamingo_module,
+        "TimeSeriesFlamingoWithTrainableEncoder",
+        FakeFlamingoModel,
+    )
+
+    OpenTSLMFlamingo(device="cpu", llm_id="dummy")
+
+    assert resize_calls == [(13, {"mean_resizing": False})]
