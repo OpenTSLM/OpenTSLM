@@ -27,6 +27,7 @@ from opentslm.model_config import (
     GRAD_CLIP_NORM,
     LR_ENCODER,
     LR_PROJECTOR,
+    MAX_PATCHES,
     NUM_EPOCHS,
     PATCH_SIZE,
     RESULTS_FILE,
@@ -50,6 +51,8 @@ else:
 # ---------------------------
 model = OpenTSLMFlamingo(
     device="cuda",
+    patch_size=PATCH_SIZE,
+    max_patches=MAX_PATCHES,
     cross_attn_every_n_layers=1,
 ).to(device)
 

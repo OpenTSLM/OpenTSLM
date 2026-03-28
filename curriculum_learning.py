@@ -57,6 +57,11 @@ from opentslm.model_config import (
 )
 
 
+def _default_max_patches(patch_size: int) -> int:
+    """Patch count for a 4096-timestep budget: ceil(4096 / patch_size) (e.g. 1024 @ ps=4, 512 @ ps=8)."""
+    return (4096 + patch_size - 1) // patch_size
+
+
 # Global stage configuration - users can modify this to mix and match stages
 CURRICULUM_STAGES = [
     "stage1_mcq",
@@ -110,6 +115,8 @@ class CurriculumTrainer:
         dist_backend: str = "nccl",
         local_rank: int = int(os.environ.get("LOCAL_RANK", 0)),
         llm_id: str = None,
+        patch_size: Optional[int] = None,
+        max_patches: Optional[int] = None,
     ):
         """
         Initialize the curriculum trainer.
@@ -122,8 +129,16 @@ class CurriculumTrainer:
             dist_backend: Distributed backend
             local_rank: Local GPU rank
             llm_id: LLM model ID (e.g., 'google/medgemma-2b', 'meta-llama/Llama-3.2-1B')
+            patch_size: Time-series patch size (default: model_config.PATCH_SIZE)
+            max_patches: Encoder positional embedding length; if None, derived from patch_size
         """
         self.model_type = model_type
+        self.patch_size = PATCH_SIZE if patch_size is None else patch_size
+        self.max_patches = (
+            max_patches
+            if max_patches is not None
+            else _default_max_patches(self.patch_size)
+        )
         self.device = device or self._get_device()
         if self.device == "mps":
             print(
@@ -145,7 +160,9 @@ class CurriculumTrainer:
             self._init_distributed()
 
         self.model = self._initialize_model()
-        self.results_dir = os.path.join("results", self.llm_id_safe, self.model_type)
+        self.results_dir = os.path.join(
+            "results", self.llm_id_safe, f"{self.model_type}_ps{self.patch_size}"
+        )
         self._create_results_dir()
 
     def _get_device(self) -> str:
@@ -160,7 +177,12 @@ class CurriculumTrainer:
     def _initialize_model(self):
         """Initialize the specified model type."""
         if self.model_type == "OpenTSLMSP":
-            model = OpenTSLMSP(llm_id=self.llm_id, device=self.device).to(self.device)
+            model = OpenTSLMSP(
+                llm_id=self.llm_id,
+                device=self.device,
+                patch_size=self.patch_size,
+                max_patches=self.max_patches,
+            ).to(self.device)
 
         elif self.model_type == "OpenTSLMFlamingo":
             model = OpenTSLMFlamingo(
@@ -168,6 +190,8 @@ class CurriculumTrainer:
                 gradient_checkpointing=self.gradient_checkpointing,
                 llm_id=self.llm_id,
                 device=self.device,
+                patch_size=self.patch_size,
+                max_patches=self.max_patches,
             ).to(self.device)
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
@@ -909,6 +933,7 @@ class CurriculumTrainer:
                 print("🔍 EVAL-ONLY MODE: Skipping training, only running evaluation")
             print("=" * 60)
             print(f"📊 Stage Configuration:")
+            print(f"   patch_size: {self.patch_size}, max_patches: {self.max_patches}")
             print(f"   Epochs: {num_epochs}")
             if self.model_type == "OpenTSLMSP":
                 print(f"   Encoder LR: {lr_encoder:.2e}")
@@ -1002,7 +1027,7 @@ class CurriculumTrainer:
                     ],
                     shuffle=True,
                     batch_size=batch_size,
-                    patch_size=PATCH_SIZE,
+                    patch_size=self.patch_size,
                     distribute_data=True,
                 )
             else:
@@ -1013,7 +1038,7 @@ class CurriculumTrainer:
                     train_dataset,
                     batch_sampler=sampler,
                     collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-                        batch, patch_size=PATCH_SIZE
+                        batch, patch_size=self.patch_size
                     ),
                 )
         else:
@@ -1021,7 +1046,7 @@ class CurriculumTrainer:
                 [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
                 shuffle=True,
                 batch_size=batch_size,
-                patch_size=PATCH_SIZE,
+                patch_size=self.patch_size,
                 distribute_data=self.world_size > 1,
             )
 
@@ -1029,7 +1054,7 @@ class CurriculumTrainer:
             [dataset_class("validation", EOS_TOKEN=self._get_model().get_eos_token())],
             shuffle=False,
             batch_size=1,
-            patch_size=PATCH_SIZE,
+            patch_size=self.patch_size,
             distribute_data=False,  # Don't distribute validation
         )
 
@@ -1037,7 +1062,7 @@ class CurriculumTrainer:
             [dataset_class("test", EOS_TOKEN=self._get_model().get_eos_token())],
             shuffle=False,
             batch_size=1,
-            patch_size=PATCH_SIZE,
+            patch_size=self.patch_size,
             distribute_data=self.world_size > 1,
         )
 
@@ -1380,6 +1405,9 @@ class CurriculumTrainer:
             print(f"💻 Device: {self.device}")
             if batch_size:
                 print(f"📦 Batch size: {batch_size}")
+            print(
+                f"🔲 patch_size={self.patch_size}, max_patches={self.max_patches} → results: {self.results_dir}"
+            )
             if self.world_size > 1:
                 print(f"🌐 Distributed training with {self.world_size} GPUs")
             print("=" * 80)
@@ -1579,41 +1607,6 @@ class CurriculumTrainer:
                 else:
                     print(f"ℹ️  LoRA not configured for {stage_name}")
 
-    def _enable_lora_if_needed(self, stage_name: str):
-        """Enable LoRA for OpenTSLMSP models in stages after stage2."""
-        if self.model_type != "OpenTSLMSP":
-            return  # LoRA only for OpenTSLMSP
-
-        # Get the underlying model (handles DDP wrapping)
-        model = self._get_model()
-
-        # Enable LoRA for stages after stage2_captioning
-        stages_with_lora = ["stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot"]
-
-        if stage_name in stages_with_lora:
-            if not getattr(model, "lora_enabled", False):
-                if self.rank == 0:
-                    print(f"🔧 Enabling LoRA for {stage_name}")
-                try:
-                    model.enable_lora(lora_r=16, lora_alpha=32, lora_dropout=0.0)
-                    if self.rank == 0:
-                        print(f"✅ LoRA enabled for {stage_name}")
-                except Exception as e:
-                    if self.rank == 0:
-                        print(f"❌ Failed to enable LoRA for {stage_name}: {e}")
-                        print("   Continuing without LoRA...")
-            else:
-                if self.rank == 0:
-                    print(f"✅ LoRA already enabled for {stage_name}")
-        else:
-            if self.rank == 0:
-                if stage_name in ["stage1_mcq", "stage2_captioning"]:
-                    print(
-                        f"ℹ️  LoRA disabled for {stage_name} (only enabled for stages 3+)"
-                    )
-                else:
-                    print(f"ℹ️  LoRA not configured for {stage_name}")
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1657,6 +1650,18 @@ def main():
         type=str,
         default="meta-llama/Llama-3.2-1B",
         help="LLM model ID for OpenTSLMFlamingo (e.g., 'google/medgemma-2b', 'meta-llama/Llama-3.2-1B')",
+    )
+    parser.add_argument(
+        "--patch_size",
+        type=int,
+        default=None,
+        help=f"Time-series patch size (default: {PATCH_SIZE} from model_config)",
+    )
+    parser.add_argument(
+        "--max_patches",
+        type=int,
+        default=None,
+        help="Encoder max sequence patches (default: scales with patch_size, ~4096 timesteps capacity)",
     )
 
     # Distributed training arguments
@@ -1702,6 +1707,8 @@ def main():
         dist_backend=args.dist_backend,
         local_rank=args.local_rank,
         llm_id=args.llm_id,
+        patch_size=args.patch_size,
+        max_patches=args.max_patches,
     )
 
     # Run curriculum

@@ -8,8 +8,10 @@
 # ---------------------------
 
 BATCH_SIZE = 4
- 
+
 PATCH_SIZE = 4
+# Positional embedding length in the time-series encoder (must cover max_len / PATCH_SIZE)
+MAX_PATCHES = 1024
 NUM_EPOCHS = 20  # allow many but we will early‑stop
 EARLY_STOP_PAT = 5  # stop if val loss hasn’t improved for this many epochs
 LR_ENCODER = 2e-4

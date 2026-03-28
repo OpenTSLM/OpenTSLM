@@ -19,8 +19,13 @@ import json
 # Add the parent directory to the path to import curriculum_learning
 
 from curriculum_learning import CurriculumTrainer
+from opentslm.model_config import PATCH_SIZE as DEFAULT_PATCH_SIZE
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Results subdir includes patch size (see CurriculumTrainer.results_dir)
+def _model_results_name(model_type: str) -> str:
+    return f"{model_type}_ps{DEFAULT_PATCH_SIZE}"
 
 
 # Add a helper to sanitize llm_id for directory names (should match curriculum_learning.py)
@@ -76,7 +81,7 @@ def test_results_directory_creation():
         assert os.path.exists(llm_dir), "LLM directory not created"
 
         # Check that model-specific directory exists
-        model_dir = os.path.join(llm_dir, "OpenTSLMFlamingo")
+        model_dir = os.path.join(llm_dir, _model_results_name("OpenTSLMFlamingo"))
         assert os.path.exists(model_dir), "Model directory not created"
 
         # Check that stage directories exist
@@ -197,10 +202,11 @@ def test_checkpoint_operations():
         # Test saving checkpoint
         trainer._save_checkpoint("stage1_mcq", 5, 0.123, mock_optimizer, mock_scheduler)
 
+        mf = _model_results_name("OpenTSLMFlamingo")
         checkpoint_path = os.path.join(
             "results",
             LLM_ID_SAFE,
-            "OpenTSLMFlamingo",
+            mf,
             "stage1_mcq",
             "checkpoints",
             "best_model.pt",
@@ -231,8 +237,9 @@ def test_previous_stage_loading():
         trainer = CurriculumTrainer("OpenTSLMFlamingo", llm_id=LLM_ID, device=device)
 
         # Create mock metrics file for stage1_mcq
+        mf = _model_results_name("OpenTSLMFlamingo")
         metrics_dir = os.path.join(
-            "results", LLM_ID_SAFE, "OpenTSLMFlamingo", "stage1_mcq", "results"
+            "results", LLM_ID_SAFE, mf, "stage1_mcq", "results"
         )
         os.makedirs(metrics_dir, exist_ok=True)
 
@@ -243,7 +250,7 @@ def test_previous_stage_loading():
 
         # Create mock checkpoint for stage1_mcq
         checkpoint_dir = os.path.join(
-            "results", LLM_ID_SAFE, "OpenTSLMFlamingo", "stage1_mcq", "checkpoints"
+            "results", LLM_ID_SAFE, mf, "stage1_mcq", "checkpoints"
         )
         os.makedirs(checkpoint_dir, exist_ok=True)
 

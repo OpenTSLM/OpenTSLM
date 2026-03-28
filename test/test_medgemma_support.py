@@ -11,6 +11,7 @@ Test script to verify MedGemma support in OpenTSLMFlamingo.
 
 import torch
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from opentslm.model_config import MAX_PATCHES, PATCH_SIZE
 
 
 def test_medgemma_support():
@@ -33,6 +34,8 @@ def test_medgemma_support():
             # Try to initialize the model
             model = OpenTSLMFlamingo(
                 device="cpu",  # Use CPU for testing
+                patch_size=PATCH_SIZE,
+                max_patches=MAX_PATCHES,
                 llm_id=model_id,
                 cross_attn_every_n_layers=1,
             )

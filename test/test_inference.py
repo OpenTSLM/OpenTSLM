@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from opentslm.model_config import MAX_PATCHES, PATCH_SIZE
 from opentslm.prompt.text_prompt import TextPrompt
 from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from opentslm.prompt.full_prompt import FullPrompt
@@ -24,6 +25,8 @@ device = (
 print(f"Using device: {device}")
 model = OpenTSLMFlamingo(
     device=device,
+    patch_size=PATCH_SIZE,
+    max_patches=MAX_PATCHES,
     llm_id="google/gemma-2b",  # or whatever you used for training
 )
 

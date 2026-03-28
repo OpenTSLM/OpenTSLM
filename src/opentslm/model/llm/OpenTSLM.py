@@ -7,6 +7,8 @@ from typing import Optional, Union
 from enum import Enum
 from huggingface_hub import hf_hub_download
 
+from opentslm.model_config import MAX_PATCHES, PATCH_SIZE
+
 from .OpenTSLMSP import OpenTSLMSP
 from .OpenTSLMFlamingo import OpenTSLMFlamingo
 
@@ -81,13 +83,20 @@ class OpenTSLM:
         # Instantiate model with fixed training parameters
         if model_type == ModelType.SP:
             # OpenTSLMSP uses default parameters from curriculum learning
-            model = OpenTSLMSP(llm_id=base_llm_id, device=device)
+            model = OpenTSLMSP(
+                llm_id=base_llm_id,
+                device=device,
+                patch_size=PATCH_SIZE,
+                max_patches=MAX_PATCHES,
+            )
             if enable_lora:
                 model.enable_lora()
         elif model_type == ModelType.FLAMINGO:
             # OpenTSLMFlamingo with fixed parameters from curriculum learning
             model = OpenTSLMFlamingo(
                 device=device,
+                patch_size=PATCH_SIZE,
+                max_patches=MAX_PATCHES,
                 llm_id=base_llm_id,
                 cross_attn_every_n_layers=1,
                 gradient_checkpointing=False,

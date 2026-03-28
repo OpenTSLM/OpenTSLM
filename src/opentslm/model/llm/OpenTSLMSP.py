@@ -32,6 +32,9 @@ class OpenTSLMSP(TimeSeriesLLM):
         self,
         llm_id: str = "meta-llama/Llama-3.2-1B",
         device: str = "cuda",
+        *,
+        patch_size: int,
+        max_patches: int,
     ):
         super().__init__(device)
 
@@ -50,12 +53,14 @@ class OpenTSLMSP(TimeSeriesLLM):
         self.llm.resize_token_embeddings(len(self.tokenizer))
 
         # 3) encoder + projector (now internal)
-        self.encoder = TransformerCNNEncoder().to(device)
+        self.encoder = TransformerCNNEncoder(
+            patch_size=patch_size, max_patches=max_patches
+        ).to(device)
         self.projector = MLPProjector(
             ENCODER_OUTPUT_DIM, self.llm.config.hidden_size, device=device
         ).to(device)
 
-        self.patch_size = 4
+        self.patch_size = patch_size
 
         # LoRA-related attributes
         self.lora_enabled = False
@@ -500,7 +505,7 @@ class OpenTSLMSP(TimeSeriesLLM):
         batch = [prompt.to_dict()]
         self.eval()
         batch = extend_time_series_to_match_patch_size_and_aggregate(
-            batch, normalize=normalize
+            batch, patch_size=self.patch_size, normalize=normalize
         )
         output = self.generate(batch, max_new_tokens=max_new_tokens)
         return output[0]

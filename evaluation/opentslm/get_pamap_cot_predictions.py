@@ -29,6 +29,7 @@ import json
 
 
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from opentslm.model_config import MAX_PATCHES, PATCH_SIZE
 from opentslm.time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
 from opentslm.prompt.full_prompt import FullPrompt
 from opentslm.prompt.text_prompt import TextPrompt
@@ -56,6 +57,8 @@ def load_model(model_path: str, device: str, llm_id: str = "meta-llama/Llama-3.2
 
     model = OpenTSLMFlamingo(
         device=device,
+        patch_size=PATCH_SIZE,
+        max_patches=MAX_PATCHES,
         llm_id=llm_id,
         cross_attn_every_n_layers=1,
     )

@@ -39,6 +39,9 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
     def __init__(
         self,
         device: str,
+        *,
+        patch_size: int,
+        max_patches: int,
         llm_id: str = "meta-llama/Llama-3.2-1B",
         cross_attn_every_n_layers: int = 1,
         decoder_layers_attr_name: str = None,
@@ -47,7 +50,9 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
     ):
         super().__init__(device)
         print(f"Flamingo Using device: {self.device}")
-        time_series_encoder = CNNTokenizer().to(device)
+        time_series_encoder = CNNTokenizer(
+            patch_size=patch_size, max_patches=max_patches
+        ).to(device)
 
         text_tokenizer = AutoTokenizer.from_pretrained(
             llm_id,
@@ -358,8 +363,9 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         try:
             batch = [prompt.to_dict()]
             self.eval()
+            ps = self.model.vision_encoder.patch_size
             batch = extend_time_series_to_match_patch_size_and_aggregate(
-                batch, normalize=normalize
+                batch, patch_size=ps, normalize=normalize
             )
             print("Generating")
             output = self.generate(batch, max_new_tokens=max_new_tokens)

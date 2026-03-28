@@ -28,6 +28,7 @@ from typing import List, Dict, Any
 import json
 
 from opentslm.model.llm.OpenTSLMSP import OpenTSLMSP
+from opentslm.model_config import MAX_PATCHES, PATCH_SIZE
 from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from opentslm.prompt.full_prompt import FullPrompt
 from opentslm.prompt.text_prompt import TextPrompt
@@ -54,8 +55,10 @@ def load_model(model_path: str, device: str, llm_id: str = "meta-llama/Llama-3.2
     print(f"Loading model from {model_path}...")
 
     model = OpenTSLMSP(
-        device=device,
         llm_id=llm_id,
+        device=device,
+        patch_size=PATCH_SIZE,
+        max_patches=MAX_PATCHES,
     )
 
     model.load_from_file(model_path)

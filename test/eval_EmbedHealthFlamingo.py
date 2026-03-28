@@ -17,6 +17,7 @@ from tqdm.auto import tqdm
 from opentslm.model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
 from opentslm.model_config import (
+    MAX_PATCHES,
     PATCH_SIZE,
     RESULTS_FILE,
 )
@@ -37,6 +38,8 @@ else:
 # ---------------------------
 model = OpenTSLMFlamingo(
     device=device,
+    patch_size=PATCH_SIZE,
+    max_patches=MAX_PATCHES,
     cross_attn_every_n_layers=1,
 ).to(device)
 

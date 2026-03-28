@@ -21,6 +21,7 @@ import pynvml  # type: ignore
 # Models
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
 from opentslm.model.llm.OpenTSLMSP import OpenTSLMSP
+from opentslm.model_config import MAX_PATCHES, PATCH_SIZE
 
 # Datasets
 from opentslm.time_series_datasets.TSQADataset import TSQADataset
@@ -365,13 +366,20 @@ def main():
     if args.model == "OpenTSLMFlamingo":
         model = OpenTSLMFlamingo(
             device=device,
+            patch_size=PATCH_SIZE,
+            max_patches=MAX_PATCHES,
             llm_id=args.llm_id,
             cross_attn_every_n_layers=1,
             gradient_checkpointing=True,
         )
         eos = model.get_eos_token()
     elif args.model == "OpenTSLMSP":
-        model = OpenTSLMSP(llm_id=args.llm_id, device=device)
+        model = OpenTSLMSP(
+            llm_id=args.llm_id,
+            device=device,
+            patch_size=PATCH_SIZE,
+            max_patches=MAX_PATCHES,
+        )
         eos = model.get_eos_token()
     else:
         raise ValueError(f"Unknown model: {args.model}")

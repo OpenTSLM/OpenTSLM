@@ -92,7 +92,9 @@ class TransformerCNNEncoder(TimeSeriesEncoderBase):
         N = x.size(1)
         if N > self.pos_embed.size(1):
             raise ValueError(
-                f"Time series of length {N*4} is too long; max supported is {self.pos_embed.size(1)*4}. Change max_patches parameter in {__file__}"
+                f"Too many patches ({N}); max_patches is {self.pos_embed.size(1)} "
+                f"(covers up to {self.pos_embed.size(1) * self.patch_size} timesteps at patch_size={self.patch_size}). "
+                f"Increase max_patches in {__file__}"
             )
         pos = self.pos_embed[:, :N, :]
         x = x + pos
