@@ -1268,7 +1268,7 @@ class CurriculumTrainer:
         return self._train_stage(
             stage_name="stage1_mcq",
             dataset_class=TSQADataset,
-            num_epochs=30,
+            num_epochs=1,
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,
@@ -1293,7 +1293,7 @@ class CurriculumTrainer:
         return self._train_stage(
             stage_name="stage2_captioning",
             dataset_class=M4QADataset,
-            num_epochs=20,
+            num_epochs=1,
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,
