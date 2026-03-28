@@ -3,7 +3,8 @@
 #
 # SPDX-License-Identifier: MIT
 
-from types import SimpleNamespace
+import torch.nn as nn
+
 from opentslm.model.encoder.CNNTokenizer import CNNTokenizer
 from opentslm.model.llm.TimeSeriesFlamingoWithTrainableEncoder import (
     TimeSeriesFlamingoWithTrainableEncoder,
@@ -33,6 +34,22 @@ def _attention_type_property(self):
 
 # Add the attention_type property to FlamingoLayer
 FlamingoLayer.attention_type = property(_attention_type_property) # type: ignore
+
+
+class _FlamingoVisionEncoderShell(nn.Module):
+    """
+    Open Flamingo expects a CLIP-like module with a `.visual` submodule and sets
+    `self.vision_encoder = vision_encoder.visual`. Some `open-flamingo` builds assign the
+    first argument as-is; this wrapper is always an nn.Module with `.visual`, and `forward`
+    delegates so either layout works for time-series inputs.
+    """
+
+    def __init__(self, encoder: nn.Module):
+        super().__init__()
+        self.visual = encoder
+
+    def forward(self, x):
+        return self.visual(x)
 
 
 class OpenTSLMFlamingo(TimeSeriesLLM):
@@ -129,8 +146,11 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                     lang_encoder.config.text_config.hidden_size
                 )
 
+        vision_shell = _FlamingoVisionEncoderShell(time_series_encoder)
+        self._time_series_encoder = time_series_encoder
+
         model = TimeSeriesFlamingoWithTrainableEncoder(
-            SimpleNamespace(visual=time_series_encoder),
+            vision_shell,
             lang_encoder,
             text_tokenizer.encode("<|endofchunk|>")[-1],
             text_tokenizer.encode("<image>")[-1],
@@ -150,8 +170,8 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             model.lang_encoder.get_input_embeddings().requires_grad_(True)
             # TODO: investigate also training the output embeddings when untied
 
-        # additonally unfreeze encoder
-        model.vision_encoder.requires_grad_(True)
+        # additionally unfreeze time-series encoder (stable ref; see _FlamingoVisionEncoderShell)
+        self._time_series_encoder.requires_grad_(True)
 
         self.model = model
         self.llm = model
@@ -363,7 +383,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         try:
             batch = [prompt.to_dict()]
             self.eval()
-            ps = self.model.vision_encoder.patch_size
+            ps = self._time_series_encoder.patch_size
             batch = extend_time_series_to_match_patch_size_and_aggregate(
                 batch, patch_size=ps, normalize=normalize
             )
