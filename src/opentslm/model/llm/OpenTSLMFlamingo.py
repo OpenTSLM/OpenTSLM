@@ -281,13 +281,14 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                     batch, include_labels=True
                 )
 
+                # Do not pass eos_token_id / pad_token_id here: some Flamingo.generate
+                # implementations do not accept them as explicit kwargs; Flamingo forwards
+                # generation kwargs to the LM and defaults eos via eoc_token_id when absent.
                 gen_ids = self.llm.generate(
                     vision_x=images,
                     lang_x=input_ids,
                     attention_mask=attention_mask,
                     max_new_tokens=max_new_tokens,
-                    eos_token_id=self.text_tokenizer.eos_token_id,
-                    pad_token_id=self.text_tokenizer.pad_token_id,
                     **generate_kwargs,
                 )
 
