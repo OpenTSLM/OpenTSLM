@@ -15,6 +15,11 @@ from opentslm.time_series_datasets.m4.M4QADataset import M4QADataset
 from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from opentslm.time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from opentslm.time_series_datasets.cot_answer_only import (
+    ECGQACoTQADatasetAnswerOnly,
+    HARCoTQADatasetAnswerOnly,
+    SleepEDFCoTQADatasetAnswerOnly,
+)
 from opentslm.time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -117,6 +122,7 @@ class CurriculumTrainer:
         llm_id: str = None,
         patch_size: Optional[int] = None,
         max_patches: Optional[int] = None,
+        cot_supervision: str = "cot",
     ):
         """
         Initialize the curriculum trainer.
@@ -131,6 +137,7 @@ class CurriculumTrainer:
             llm_id: LLM model ID (e.g., 'google/medgemma-2b', 'meta-llama/Llama-3.2-1B')
             patch_size: Time-series patch size (default: model_config.PATCH_SIZE)
             max_patches: Encoder positional embedding length; if None, derived from patch_size
+            cot_supervision: For stages 3–5, "cot" (full rationale) or "answer_only" (label / CSV answer).
         """
         self.model_type = model_type
         self.patch_size = PATCH_SIZE if patch_size is None else patch_size
@@ -146,6 +153,11 @@ class CurriculumTrainer:
             )
         self.llm_id = llm_id
         self.llm_id_safe = self._sanitize_llm_id(llm_id)
+        if cot_supervision not in ("cot", "answer_only"):
+            raise ValueError(
+                f"cot_supervision must be 'cot' or 'answer_only', got {cot_supervision!r}"
+            )
+        self.cot_supervision = cot_supervision
 
         # Distributed training parameters
         self.gradient_checkpointing = gradient_checkpointing
@@ -160,9 +172,10 @@ class CurriculumTrainer:
             self._init_distributed()
 
         self.model = self._initialize_model()
-        self.results_dir = os.path.join(
-            "results", self.llm_id_safe, f"{self.model_type}_ps{self.patch_size}"
-        )
+        run_slug = f"{self.model_type}_ps{self.patch_size}"
+        if self.cot_supervision == "answer_only":
+            run_slug += "_sup_answer_only"
+        self.results_dir = os.path.join("results", self.llm_id_safe, run_slug)
         self._create_results_dir()
 
     def _get_device(self) -> str:
@@ -1315,9 +1328,14 @@ class CurriculumTrainer:
         """
         sampler = None
 
+        har_cls = (
+            HARCoTQADatasetAnswerOnly
+            if self.cot_supervision == "answer_only"
+            else HARCoTQADataset
+        )
         return self._train_stage(
             stage_name="stage3_cot",
-            dataset_class=HARCoTQADataset,
+            dataset_class=har_cls,
             num_epochs=30,
             lr_encoder=2e-4,
             lr_projector=1e-4,
@@ -1341,9 +1359,14 @@ class CurriculumTrainer:
         """
         sampler = None
 
+        sleep_cls = (
+            SleepEDFCoTQADatasetAnswerOnly
+            if self.cot_supervision == "answer_only"
+            else SleepEDFCoTQADataset
+        )
         return self._train_stage(
             stage_name="stage4_sleep_cot",
-            dataset_class=SleepEDFCoTQADataset,
+            dataset_class=sleep_cls,
             num_epochs=60,
             lr_encoder=2e-4,
             lr_projector=1e-4,
@@ -1367,9 +1390,14 @@ class CurriculumTrainer:
         """
         sampler = None
 
+        ecg_cls = (
+            ECGQACoTQADatasetAnswerOnly
+            if self.cot_supervision == "answer_only"
+            else ECGQACoTQADataset
+        )
         return self._train_stage(
             stage_name="stage5_ecg_cot",
-            dataset_class=ECGQACoTQADataset,
+            dataset_class=ecg_cls,
             num_epochs=60,
             lr_encoder=2e-4,
             lr_projector=1e-4,
@@ -1406,7 +1434,8 @@ class CurriculumTrainer:
             if batch_size:
                 print(f"📦 Batch size: {batch_size}")
             print(
-                f"🔲 patch_size={self.patch_size}, max_patches={self.max_patches} → results: {self.results_dir}"
+                f"🔲 patch_size={self.patch_size}, max_patches={self.max_patches}, "
+                f"cot_supervision={self.cot_supervision} → results: {self.results_dir}"
             )
             if self.world_size > 1:
                 print(f"🌐 Distributed training with {self.world_size} GPUs")
@@ -1663,6 +1692,14 @@ def main():
         default=None,
         help="Encoder max sequence patches (default: scales with patch_size, ~4096 timesteps capacity)",
     )
+    parser.add_argument(
+        "--cot_supervision",
+        type=str,
+        choices=["cot", "answer_only"],
+        default="cot",
+        help='Stages 3–5: "cot" = supervise full rationale; "answer_only" = HAR/Sleep use '
+        'label, ECG-QA uses CSV answer column (separate results dir suffix).',
+    )
 
     # Distributed training arguments
     parser.add_argument(
@@ -1709,6 +1746,7 @@ def main():
         llm_id=args.llm_id,
         patch_size=args.patch_size,
         max_patches=args.max_patches,
+        cot_supervision=args.cot_supervision,
     )
 
     # Run curriculum

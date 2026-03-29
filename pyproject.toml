@@ -97,6 +97,12 @@ members = [
 ]
 
 
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+markers = [
+    "slow: loads and formats full local CoT splits (can take minutes; use pytest -s to see printed examples)",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = "py312"

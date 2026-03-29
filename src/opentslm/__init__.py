@@ -3,6 +3,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-from opentslm.model.llm.OpenTSLM import OpenTSLM
-
 __all__ = ["OpenTSLM"]
+
+
+def __getattr__(name: str):
+    if name == "OpenTSLM":
+        from opentslm.model.llm.OpenTSLM import OpenTSLM
+
+        return OpenTSLM
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -10,5 +10,5 @@ import os
 # Path to this file's directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Path to raw data directory
-RAW_DATA = os.path.join(BASE_DIR, "..", "..", "data")
+# Path to raw data directory (repo-root `data/`: time_series_datasets → opentslm → src → project root)
+RAW_DATA = os.path.normpath(os.path.join(BASE_DIR, "..", "..", "..", "data"))
