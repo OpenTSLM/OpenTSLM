@@ -123,6 +123,7 @@ class CurriculumTrainer:
         ecg_subsample_seed: int = 42,
         results_tag: Optional[str] = None,
         allow_fresh_stage5_ecg: bool = False,
+        val_every_n_epochs: int = 2,
     ):
         """
         Initialize the curriculum trainer.
@@ -157,6 +158,7 @@ class CurriculumTrainer:
         self.ecg_subsample_seed = int(ecg_subsample_seed)
         self.results_tag = results_tag
         self.allow_fresh_stage5_ecg = bool(allow_fresh_stage5_ecg)
+        self.val_every_n_epochs = max(1, int(val_every_n_epochs))
 
         # Distributed training parameters
         self.gradient_checkpointing = gradient_checkpointing
@@ -449,7 +451,11 @@ class CurriculumTrainer:
                 raise RuntimeError(f"Failed to save checkpoint: {e}")
 
     def _save_loss_history(
-        self, stage: str, epoch: int, train_loss: float, val_loss: float
+        self,
+        stage: str,
+        epoch: int,
+        train_loss: float,
+        val_loss: Optional[float] = None,
     ):
         """Save loss history to a file for tracking training progress."""
         if dist.is_initialized() and self.rank != 0:
@@ -468,8 +474,9 @@ class CurriculumTrainer:
                 f.write("-" * 30 + "\n")
 
         # Append the current epoch's losses
+        val_col = "nan" if val_loss is None else f"{val_loss:.6f}"
         with open(loss_history_file, "a") as f:
-            f.write(f"{epoch}\t{train_loss:.6f}\t{val_loss:.6f}\n")
+            f.write(f"{epoch}\t{train_loss:.6f}\t{val_col}\n")
 
     def _display_loss_history(self, stage: str):
         """Display the loss history for a stage if available."""
@@ -959,6 +966,7 @@ class CurriculumTrainer:
             print(f"   Batch size per GPU: {batch_size}")
             if self.world_size > 1:
                 print(f"   Effective batch size: {batch_size * self.world_size}")
+            print(f"   Validate every {self.val_every_n_epochs} epoch(s) (first epoch of stage always validated)")
             print()
 
         # Check if checkpoint exists when in eval_only mode
@@ -1080,7 +1088,7 @@ class CurriculumTrainer:
             shuffle=False,
             batch_size=1,
             patch_size=self.patch_size,
-            distribute_data=False,  # Don't distribute validation
+            distribute_data=self.world_size > 1,
         )
 
         test_loader = self._merge_data_loaders(
@@ -1182,68 +1190,90 @@ class CurriculumTrainer:
                 if self.rank == 0:
                     tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
 
-                # Validation
-                val_loss = 0.0
-                self.model.eval()
-                with torch.no_grad():
-                    for batch in tqdm(
-                        val_loader,
-                        desc=f"Validating {stage_name}",
-                        disable=self.rank != 0,
-                    ):
-                        val_loss += self._get_model().compute_loss(batch).item()
+                # Validation (optional every N epochs; first epoch of this run always validated)
+                run_val = (epoch - start_epoch) % self.val_every_n_epochs == 0
+                avg_val_loss: Optional[float] = None
 
-                avg_val_loss = val_loss / len(val_loader)
+                if run_val:
+                    if hasattr(val_loader.sampler, "set_epoch"):
+                        val_loader.sampler.set_epoch(epoch)
 
-                # Synchronize validation loss across all ranks
-                if dist.is_initialized():
-                    val_loss_tensor = torch.tensor(avg_val_loss, device=self.device)
-                    dist.all_reduce(val_loss_tensor, op=dist.ReduceOp.SUM)
-                    avg_val_loss = val_loss_tensor.item() / self.world_size
+                    val_loss_weighted = 0.0
+                    val_n_samples = 0
+                    self.model.eval()
+                    with torch.no_grad():
+                        for batch in tqdm(
+                            val_loader,
+                            desc=f"Validating {stage_name}",
+                            disable=self.rank != 0,
+                        ):
+                            batch_loss = self._get_model().compute_loss(batch).item()
+                            bs = len(batch)
+                            val_loss_weighted += batch_loss * bs
+                            val_n_samples += bs
 
-                if self.rank == 0:
-                    tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
-                    tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
+                    if dist.is_initialized():
+                        t = torch.tensor(
+                            [val_loss_weighted, float(val_n_samples)],
+                            device=self.device,
+                            dtype=torch.float64,
+                        )
+                        dist.all_reduce(t, op=dist.ReduceOp.SUM)
+                        val_loss_weighted = t[0].item()
+                        val_n_samples = int(t[1].item())
 
-                # Save loss history for this epoch
-                self._save_loss_history(stage_name, epoch, avg_train_loss, avg_val_loss)
-
-                # Early stopping - all ranks need to make the same decision
-                should_save = avg_val_loss + 1e-4 < best_val_loss
-                if dist.is_initialized():
-                    save_tensor = torch.tensor(
-                        1 if should_save else 0, device=self.device
+                    avg_val_loss = (
+                        val_loss_weighted / val_n_samples if val_n_samples > 0 else 0.0
                     )
-                    dist.all_reduce(save_tensor, op=dist.ReduceOp.SUM)
-                    should_save = (
-                        save_tensor.item() > 0
-                    )  # If any rank thinks we should save, we save
 
-                if should_save:
-                    best_val_loss = avg_val_loss
-                    epochs_no_improve = 0
-                    self._save_checkpoint(
-                        stage_name, epoch, avg_val_loss, optimizer, scheduler
-                    )
                     if self.rank == 0:
-                        tqdm.write("✔️  New best model saved.\n")
+                        tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
+                        tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
                 else:
-                    epochs_no_improve += 1
                     if self.rank == 0:
                         tqdm.write(
-                            f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.\n"
+                            f"Epoch {epoch} — val   skipped (val_every_n_epochs={self.val_every_n_epochs})"
                         )
+                        tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
 
-                    # Synchronize early stopping decision across all ranks
-                    if epochs_no_improve >= EARLY_STOP_PAT:
+                self._save_loss_history(stage_name, epoch, avg_train_loss, avg_val_loss)
+
+                if run_val:
+                    # Early stopping - all ranks need to make the same decision
+                    should_save = avg_val_loss + 1e-4 < best_val_loss
+                    if dist.is_initialized():
+                        save_tensor = torch.tensor(
+                            1 if should_save else 0, device=self.device
+                        )
+                        dist.all_reduce(save_tensor, op=dist.ReduceOp.SUM)
+                        should_save = (
+                            save_tensor.item() > 0
+                        )  # If any rank thinks we should save, we save
+
+                    if should_save:
+                        best_val_loss = avg_val_loss
+                        epochs_no_improve = 0
+                        self._save_checkpoint(
+                            stage_name, epoch, avg_val_loss, optimizer, scheduler
+                        )
+                        if self.rank == 0:
+                            tqdm.write("✔️  New best model saved.\n")
+                    else:
+                        epochs_no_improve += 1
                         if self.rank == 0:
                             tqdm.write(
-                                f"\nEarly stopping triggered after {epoch} epochs."
+                                f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.\n"
                             )
-                            tqdm.write(
-                                f"Final stats: best_val_loss={best_val_loss:.4f}, epochs_no_improve={epochs_no_improve}"
-                            )
-                        break
+
+                        if epochs_no_improve >= EARLY_STOP_PAT:
+                            if self.rank == 0:
+                                tqdm.write(
+                                    f"\nEarly stopping triggered after {epoch} epochs."
+                                )
+                                tqdm.write(
+                                    f"Final stats: best_val_loss={best_val_loss:.4f}, epochs_no_improve={epochs_no_improve}"
+                                )
+                            break
 
                 # Synchronize best_val_loss and epochs_no_improve across all ranks
                 if dist.is_initialized():
@@ -1666,6 +1696,12 @@ def main():
         default=None,
         help="Batch size for training (default: use value from model_config.py)",
     )
+    parser.add_argument(
+        "--val_every_n_epochs",
+        type=int,
+        default=2,
+        help="Run validation (and checkpoint/early-stop checks) every N epochs. The first epoch of each training segment still validates. Default: 2; use 1 for every epoch.",
+    )
 
     # Evaluation arguments
     parser.add_argument(
@@ -1790,6 +1826,7 @@ def main():
         ecg_subsample_seed=args.ecg_subsample_seed,
         results_tag=results_tag,
         allow_fresh_stage5_ecg=allow_fresh_stage5_ecg,
+        val_every_n_epochs=args.val_every_n_epochs,
     )
 
     # Run curriculum
