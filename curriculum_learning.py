@@ -10,6 +10,7 @@ import json
 import os as _os
 import argparse
 from typing import List, Optional, Dict, Any, Callable
+from functools import partial
 from opentslm.time_series_datasets.TSQADataset import TSQADataset
 from opentslm.time_series_datasets.m4.M4QADataset import M4QADataset
 from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
@@ -117,6 +118,11 @@ class CurriculumTrainer:
         llm_id: str = None,
         patch_size: Optional[int] = None,
         max_patches: Optional[int] = None,
+        ecg_train_fraction: float = 1.0,
+        ecg_stratify_by: str = "answer",
+        ecg_subsample_seed: int = 42,
+        results_tag: Optional[str] = None,
+        allow_fresh_stage5_ecg: bool = False,
     ):
         """
         Initialize the curriculum trainer.
@@ -146,6 +152,11 @@ class CurriculumTrainer:
             )
         self.llm_id = llm_id
         self.llm_id_safe = self._sanitize_llm_id(llm_id)
+        self.ecg_train_fraction = float(ecg_train_fraction)
+        self.ecg_stratify_by = ecg_stratify_by
+        self.ecg_subsample_seed = int(ecg_subsample_seed)
+        self.results_tag = results_tag
+        self.allow_fresh_stage5_ecg = bool(allow_fresh_stage5_ecg)
 
         # Distributed training parameters
         self.gradient_checkpointing = gradient_checkpointing
@@ -160,8 +171,13 @@ class CurriculumTrainer:
             self._init_distributed()
 
         self.model = self._initialize_model()
-        self.results_dir = os.path.join(
+        base_results_dir = os.path.join(
             "results", self.llm_id_safe, f"{self.model_type}_ps{self.patch_size}"
+        )
+        self.results_dir = (
+            os.path.join(base_results_dir, self.results_tag)
+            if self.results_tag
+            else base_results_dir
         )
         self._create_results_dir()
 
@@ -953,7 +969,14 @@ class CurriculumTrainer:
 
         # Load previous stage model and display metrics
         try:
-            previous_stage_info = self._load_previous_stage_model(stage_name)
+            previous_stage_info = None
+            if stage_name == "stage5_ecg_cot" and self.allow_fresh_stage5_ecg:
+                if self.rank == 0:
+                    print(
+                        "🆕 Stage5 ECG-QA-CoT will start from a fresh model (dependency on previous stages disabled)."
+                    )
+            else:
+                previous_stage_info = self._load_previous_stage_model(stage_name)
             if previous_stage_info:
                 if self.rank == 0:
                     print(f"📂 Loading best model from {previous_stage_info['stage']}:")
@@ -971,7 +994,9 @@ class CurriculumTrainer:
                     print()
             else:
                 # Only allow fresh model for first stage
-                if stage_name != CURRICULUM_STAGES[0]:
+                if stage_name != CURRICULUM_STAGES[0] and not (
+                    stage_name == "stage5_ecg_cot" and self.allow_fresh_stage5_ecg
+                ):
                     raise RuntimeError(
                         f"Cannot start {stage_name} with fresh model. Previous stage {CURRICULUM_STAGES[CURRICULUM_STAGES.index(stage_name) - 1]} must be completed first."
                     )
@@ -1367,9 +1392,15 @@ class CurriculumTrainer:
         """
         sampler = None
 
+        dataset_class = partial(
+            ECGQACoTQADataset,
+            train_fraction=self.ecg_train_fraction,
+            stratify_by=self.ecg_stratify_by,
+            subsample_seed=self.ecg_subsample_seed,
+        )
         return self._train_stage(
             stage_name="stage5_ecg_cot",
-            dataset_class=ECGQACoTQADataset,
+            dataset_class=dataset_class,
             num_epochs=60,
             lr_encoder=2e-4,
             lr_projector=1e-4,
@@ -1664,6 +1695,39 @@ def main():
         help="Encoder max sequence patches (default: scales with patch_size, ~4096 timesteps capacity)",
     )
 
+    # ECG-QA train-size ablation (train split only; eval set unchanged)
+    parser.add_argument(
+        "--ecg_train_fraction",
+        type=float,
+        default=1.0,
+        help="Fraction of ECG-QA CoT TRAIN data to use for stage5 (e.g., 0.1, 0.5, 0.75, 1.0). Validation/test are unchanged.",
+    )
+    parser.add_argument(
+        "--ecg_stratify_by",
+        type=str,
+        default="answer",
+        choices=["answer", "template_id", "question_type"],
+        help="Label to preserve distribution for ECG-QA CoT train subsampling.",
+    )
+    parser.add_argument(
+        "--ecg_subsample_seed",
+        type=int,
+        default=42,
+        help="RNG seed for deterministic ECG-QA CoT train subsampling.",
+    )
+    parser.add_argument(
+        "--ecg_only",
+        default=False,
+        action="store_true",
+        help="Run only ECG-QA-CoT (stage5) from scratch and store outputs in a fraction-specific results subfolder.",
+    )
+    parser.add_argument(
+        "--results_tag",
+        type=str,
+        default=None,
+        help="Optional extra subfolder under results/<llm>/<model_ps...>/ to separate runs (e.g., ablations/ecgqa_10pct).",
+    )
+
     # Distributed training arguments
     parser.add_argument(
         "--gradient_checkpointing",
@@ -1698,6 +1762,18 @@ def main():
     set_global_verbose(args.verbose)
     logger = get_logger(verbose=args.verbose)
 
+    # If ECG-only mode, force stage5 and put outputs in a fraction-specific folder.
+    # This ensures each fraction writes to a separate results directory.
+    results_tag = args.results_tag
+    allow_fresh_stage5_ecg = False
+    stages = args.stages
+    if args.ecg_only:
+        stages = ["stage5_ecg_cot"]
+        allow_fresh_stage5_ecg = True
+        frac_pct = int(round(float(args.ecg_train_fraction) * 100))
+        auto_tag = f"ecgqa_cot_only/fraction_{frac_pct}"
+        results_tag = auto_tag if results_tag is None else os.path.join(results_tag, auto_tag)
+
     # Initialize trainer
     trainer = CurriculumTrainer(
         args.model,
@@ -1709,10 +1785,15 @@ def main():
         llm_id=args.llm_id,
         patch_size=args.patch_size,
         max_patches=args.max_patches,
+        ecg_train_fraction=args.ecg_train_fraction,
+        ecg_stratify_by=args.ecg_stratify_by,
+        ecg_subsample_seed=args.ecg_subsample_seed,
+        results_tag=results_tag,
+        allow_fresh_stage5_ecg=allow_fresh_stage5_ecg,
     )
 
     # Run curriculum
-    results = trainer.run_curriculum(args.stages, args.batch_size, args.eval_only)
+    results = trainer.run_curriculum(stages, args.batch_size, args.eval_only)
 
     # Print summary
     logger.info("Final Results Summary:")

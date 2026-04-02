@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: MIT
 
 from datasets import Dataset
-from typing import List, Tuple, Literal
+from typing import List, Tuple, Literal, Optional, Dict, Any
 import os
 from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from opentslm.time_series_datasets.QADataset import QADataset
@@ -21,10 +21,20 @@ class ECGQACoTQADataset(QADataset):
     Requires: pip install wfdb
     """
     
-    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, 
-                 format_sample_str: bool = False, time_series_format_function=None,
-                 max_samples: int = None, exclude_comparison: bool = False,
-                 preload_processed_data: bool = True):
+    def __init__(
+        self,
+        split: Literal["train", "test", "validation"],
+        EOS_TOKEN: str,
+        format_sample_str: bool = False,
+        time_series_format_function=None,
+        max_samples: int = None,
+        exclude_comparison: bool = False,
+        preload_processed_data: bool = True,
+        *,
+        train_fraction: float = 1.0,
+        stratify_by: Literal["answer", "template_id", "question_type"] = "answer",
+        subsample_seed: int = 42,
+    ):
         """
         Initialize ECG-QA CoT Dataset.
         
@@ -40,13 +50,156 @@ class ECGQACoTQADataset(QADataset):
         self.max_samples = max_samples
         self.exclude_comparison = exclude_comparison
         self.preload_processed_data = preload_processed_data
+        self.train_fraction = float(train_fraction)
+        self.stratify_by = stratify_by
+        self.subsample_seed = int(subsample_seed)
         super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
+
+    @staticmethod
+    def _stratified_subsample_indices(
+        rows: List[Dict[str, Any]],
+        *,
+        fraction: float,
+        stratify_by: str,
+        seed: int,
+    ) -> List[int]:
+        """
+        Deterministically subsample indices while preserving per-label proportions.
+
+        - Operates on the raw (unformatted) HF rows (dict-like).
+        - Keeps val/test untouched; intended for train only.
+        """
+        if fraction >= 1.0:
+            return list(range(len(rows)))
+        if fraction <= 0.0:
+            return []
+
+        rng = np.random.RandomState(seed)
+        n_total = len(rows)
+        target_n = int(round(n_total * fraction))
+        if target_n <= 0:
+            return []
+        if target_n >= n_total:
+            return list(range(n_total))
+
+        # Group indices by label
+        groups: Dict[str, List[int]] = {}
+        for i, row in enumerate(rows):
+            if stratify_by not in row:
+                raise ValueError(
+                    f"Cannot stratify ECG-QA CoT train subsample by '{stratify_by}': key missing in row. "
+                    f"Available keys: {sorted(list(row.keys()))}"
+                )
+            label = row.get(stratify_by)
+            # Normalize to string key
+            if label is None:
+                label_key = "__none__"
+            else:
+                label_key = str(label)
+            groups.setdefault(label_key, []).append(i)
+
+        # Desired counts per group ~ round(count * fraction), with a minimum of 1 where feasible.
+        desired: Dict[str, int] = {}
+        remainders: List[tuple[str, float]] = []
+        for label_key, idxs in groups.items():
+            exact = len(idxs) * fraction
+            base = int(np.floor(exact))
+            rem = float(exact - base)
+            desired[label_key] = base
+            remainders.append((label_key, rem))
+
+        # Ensure at least 1 sample for groups that would otherwise go to 0,
+        # as long as we have budget.
+        labels_sorted = sorted(groups.keys())
+        for label_key in labels_sorted:
+            if desired[label_key] == 0 and len(groups[label_key]) > 0 and target_n > 0:
+                desired[label_key] = 1
+
+        # Adjust to match target_n exactly using remainder-based rounding.
+        current = int(sum(desired.values()))
+        if current > target_n:
+            # Remove extras from smallest remainders first, without going below 1 if possible.
+            # If target is extremely small, we may have to drop some groups to 0.
+            # Sort by remainder ascending, then by label for determinism.
+            remainders_sorted = sorted(remainders, key=lambda x: (x[1], x[0]))
+            for label_key, _ in remainders_sorted:
+                if current <= target_n:
+                    break
+                if desired[label_key] > 1:
+                    desired[label_key] -= 1
+                    current -= 1
+            # If still too many (target < number of groups), allow dropping to 0.
+            if current > target_n:
+                for label_key, _ in remainders_sorted:
+                    if current <= target_n:
+                        break
+                    if desired[label_key] > 0:
+                        desired[label_key] -= 1
+                        current -= 1
+        elif current < target_n:
+            # Add missing counts to largest remainders first, bounded by group size.
+            remainders_sorted = sorted(remainders, key=lambda x: (-x[1], x[0]))
+            made_progress = True
+            while current < target_n and made_progress:
+                made_progress = False
+                for label_key, _ in remainders_sorted:
+                    if current >= target_n:
+                        break
+                    if desired[label_key] < len(groups[label_key]):
+                        desired[label_key] += 1
+                        current += 1
+                        made_progress = True
+
+        # Finally, sample within each group deterministically.
+        chosen: List[int] = []
+        for label_key in sorted(groups.keys()):
+            idxs = groups[label_key]
+            k = min(desired.get(label_key, 0), len(idxs))
+            if k <= 0:
+                continue
+            # Stable shuffle within group
+            perm = rng.permutation(len(idxs))
+            chosen.extend([idxs[j] for j in perm[:k]])
+
+        # Deterministic final order (doesn't matter for training shuffle, but helps reproducibility)
+        chosen = sorted(chosen)
+        if len(chosen) != target_n:
+            # As a last-resort guard, trim or pad from the global pool deterministically.
+            if len(chosen) > target_n:
+                chosen = chosen[:target_n]
+            else:
+                remaining = [i for i in range(n_total) if i not in set(chosen)]
+                rng.shuffle(remaining)
+                chosen.extend(remaining[: (target_n - len(chosen))])
+                chosen = sorted(chosen)
+
+        return chosen
 
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """Load the ECG-QA CoT dataset splits."""
         print("Loading ECG-QA CoT dataset splits...")
         train, val, test = load_ecg_qa_cot_splits()
         
+        # Subsample TRAIN ONLY for ablations, keeping label proportions fixed.
+        if self.train_fraction != 1.0:
+            if not (0.0 < self.train_fraction <= 1.0):
+                raise ValueError(
+                    f"train_fraction must be in (0, 1], got {self.train_fraction}"
+                )
+            train_rows = list(train)
+            keep_idxs = self._stratified_subsample_indices(
+                train_rows,
+                fraction=self.train_fraction,
+                stratify_by=self.stratify_by,
+                seed=self.subsample_seed,
+            )
+            original_train_len = len(train_rows)
+            train = Dataset.from_list([train_rows[i] for i in keep_idxs])
+            print(
+                f"Stratified train subsample: {original_train_len} -> {len(train)} "
+                f"({self.train_fraction:.0%}) by '{self.stratify_by}', seed={self.subsample_seed}"
+            )
+
         # Filter out comparison questions if requested
         if self.exclude_comparison:
             print("Filtering out comparison questions...")
