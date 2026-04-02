@@ -7,7 +7,8 @@ export PYTHONPATH="${ROOT}/src"
 CURR_PY="${ROOT}/curriculum_learning.py"
 
 # OpenTSLM wrapper to train (OpenTSLMSP or OpenTSLMFlamingo)
-MODEL_TYPE="${MODEL_TYPE:-OpenTSLMSP}"
+# Default to Flamingo for this ablation.
+MODEL_TYPE="${MODEL_TYPE:-OpenTSLMFlamingo}"
 
 # Distributed (multi-GPU) settings
 NPROC_PER_NODE="${NPROC_PER_NODE:-8}"
