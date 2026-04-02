@@ -27,7 +27,7 @@ for frac in "${FRACTIONS[@]}"; do
   "${TORCHRUN}" --standalone --nproc_per_node="${NPROC_PER_NODE}" "${CURR_PY}" \
     --model "${MODEL_TYPE}" \
     --llm_id "${LLM_ID}" \
-    --batch_size 2 \
+    --batch_size 1 \
     --ecg_only \
     --ecg_train_fraction "${frac}" \
     2>&1 | tee "${ROOT}/logs/ecgqa_cot_${MODEL_TYPE}_llama3b_fraction_${frac}.log"
