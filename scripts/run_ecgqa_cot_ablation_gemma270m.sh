@@ -9,6 +9,10 @@ CURR_PY="${ROOT}/curriculum_learning.py"
 # OpenTSLM wrapper to train (OpenTSLMSP or OpenTSLMFlamingo)
 MODEL_TYPE="${MODEL_TYPE:-OpenTSLMSP}"
 
+# Distributed (multi-GPU) settings
+NPROC_PER_NODE="${NPROC_PER_NODE:-8}"
+TORCHRUN="${TORCHRUN:-torchrun}"
+
 # ECG-only ablation settings
 LLM_ID="google/gemma-3-270m"
 FRACTIONS=(0.10 0.20 0.50)
@@ -18,9 +22,9 @@ mkdir -p "${ROOT}/logs"
 for frac in "${FRACTIONS[@]}"; do
   echo ""
   echo "================================================================================"
-  echo "  ECG-QA-CoT ablation | llm_id=${LLM_ID} | model=${MODEL_TYPE} | fraction=${frac}"
+  echo "  ECG-QA-CoT ablation | llm_id=${LLM_ID} | model=${MODEL_TYPE} | fraction=${frac} | gpus=${NPROC_PER_NODE}"
   echo "================================================================================"
-  python "${CURR_PY}" \
+  "${TORCHRUN}" --standalone --nproc_per_node="${NPROC_PER_NODE}" "${CURR_PY}" \
     --model "${MODEL_TYPE}" \
     --llm_id "${LLM_ID}" \
     --ecg_only \
