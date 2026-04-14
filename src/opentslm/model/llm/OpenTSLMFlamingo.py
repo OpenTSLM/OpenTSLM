@@ -186,7 +186,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             if self.model.lang_encoder.use_media_placement_augmentation
             else False
         )
-        for layer in self.model.lang_encoder.get_decoder().layers:
+        for layer in self.model.lang_encoder._get_decoder_layers():
             layer.condition_media_locations(media_locations)
             layer.condition_attend_previous(attend_previous)
 
@@ -297,15 +297,17 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                 self.model._encode_vision_x(vision_x=images)
                 self._condition_media_locations(input_ids)
 
-                gen_ids = self.model.lang_encoder.generate(
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    eos_token_id=self.text_tokenizer.eos_token_id,
-                    pad_token_id=self.text_tokenizer.pad_token_id,
-                    **generate_kwargs,
-                )
-                self.model.lang_encoder.clear_conditioned_layers()
+                try:
+                    gen_ids = self.model.lang_encoder.generate(
+                        inputs_embeds=inputs_embeds,
+                        attention_mask=attention_mask,
+                        max_new_tokens=max_new_tokens,
+                        eos_token_id=self.text_tokenizer.eos_token_id,
+                        pad_token_id=self.text_tokenizer.pad_token_id,
+                        **generate_kwargs,
+                    )
+                finally:
+                    self.model.lang_encoder.clear_conditioned_layers()
 
                 # Remove input ids from generation
                 answer_only_ids = gen_ids[:, input_ids.shape[1] :]

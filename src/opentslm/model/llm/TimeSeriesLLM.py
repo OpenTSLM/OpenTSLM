@@ -47,7 +47,7 @@ class TimeSeriesLLM(nn.Module):
         raise NotImplementedError("Eval prompt method should be implemented by the subclass")
 
     def stream_prompt(
-        self, prompt: FullPrompt, max_new_tokens: int = 1000, normalize: bool = False
+        self, prompt: FullPrompt, max_new_tokens: int = 1000, normalize: bool = False, **generate_kwargs
     ) -> Iterator[str]:
         raise NotImplementedError(
             "stream_prompt method should be implemented by the subclass"
