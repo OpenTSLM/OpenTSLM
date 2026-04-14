@@ -167,10 +167,10 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         attention_mask: torch.Tensor,
         labels: torch.Tensor | None = None,
     ):
-        self.model._encode_vision_x(vision_x=images)
         inputs_embeds = self._build_input_embeddings(input_ids)
-        self._condition_media_locations(input_ids)
         try:
+            self.model._encode_vision_x(vision_x=images)
+            self._condition_media_locations(input_ids)
             return super(FlamingoLMMixin, self.model.lang_encoder).forward(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -294,10 +294,9 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                     batch, include_labels=True
                 )
                 inputs_embeds = self._build_input_embeddings(input_ids)
-                self.model._encode_vision_x(vision_x=images)
-                self._condition_media_locations(input_ids)
-
                 try:
+                    self.model._encode_vision_x(vision_x=images)
+                    self._condition_media_locations(input_ids)
                     gen_ids = self.model.lang_encoder.generate(
                         inputs_embeds=inputs_embeds,
                         attention_mask=attention_mask,
@@ -339,20 +338,21 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                 )
 
                 def run_generation() -> None:
-                    self.model._encode_vision_x(vision_x=images)
-                    self._condition_media_locations(input_ids)
-                    try:
-                        self.model.lang_encoder.generate(
-                            inputs_embeds=inputs_embeds,
-                            attention_mask=attention_mask,
-                            max_new_tokens=max_new_tokens,
-                            eos_token_id=self.text_tokenizer.eos_token_id,
-                            pad_token_id=self.text_tokenizer.pad_token_id,
-                            streamer=streamer,
-                            **generate_kwargs,
-                        )
-                    finally:
-                        self.model.lang_encoder.clear_conditioned_layers()
+                    with torch.inference_mode():
+                        try:
+                            self.model._encode_vision_x(vision_x=images)
+                            self._condition_media_locations(input_ids)
+                            self.model.lang_encoder.generate(
+                                inputs_embeds=inputs_embeds,
+                                attention_mask=attention_mask,
+                                max_new_tokens=max_new_tokens,
+                                eos_token_id=self.text_tokenizer.eos_token_id,
+                                pad_token_id=self.text_tokenizer.pad_token_id,
+                                streamer=streamer,
+                                **generate_kwargs,
+                            )
+                        finally:
+                            self.model.lang_encoder.clear_conditioned_layers()
 
                 yield from self._iterate_streamer(streamer, run_generation)
         finally:
