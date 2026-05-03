@@ -344,9 +344,19 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         # Remove prefixes ('model.' or 'llm.') if present in checkpoint keys
         # The checkpoint may have been saved with keys prefixed with 'model.' or 'llm.'
         # but the actual Flamingo model expects keys without these prefixes
+        # Also filter out 'old_decoder_blocks' keys - these are redundant aliases.
+        # old_decoder_blocks is a reference to the same ModuleList as model.layers (for LLaMA),
+        # so the weights are already saved/loaded via the actual layer path (e.g., model.layers.0.self_attn.q_proj.weight).
+        # Loading via model.layers automatically updates old_decoder_blocks since it's just a reference.
         new_model_state = {}
         prefix_removed_count = 0
+        old_decoder_blocks_filtered = 0
         for k, v in model_state.items():
+            # Skip old_decoder_blocks keys - these are redundant (weights loaded via model.layers path)
+            if "old_decoder_blocks" in k:
+                old_decoder_blocks_filtered += 1
+                continue
+            
             new_key = k
             # Remove 'llm.' prefix if present (common when saved as checkpoint["llm"])
             if new_key.startswith("llm."):
@@ -361,6 +371,8 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         
         if prefix_removed_count > 0:
             print(f"ℹ️  Removed prefix from {prefix_removed_count} checkpoint keys")
+        if old_decoder_blocks_filtered > 0:
+            print(f"ℹ️  Filtered out {old_decoder_blocks_filtered} redundant old_decoder_blocks keys (weights loaded via model.layers path)")
 
         # Load state dict with strict=False to handle missing/unexpected keys
         # The checkpoint contains state for self.model (the Flamingo model), not self

@@ -20,7 +20,7 @@ from opentslm.model_config import PATCH_SIZE
 import torch
 
 # Model repository ID - change this to test different models
-REPO_ID = "OpenTSLM/llama-3.2-1b-ecg-sp"
+REPO_ID = "OpenTSLM/llama-3.2-1b-ecg-flamingo"
 
 def main():
     print("=" * 60)
