@@ -7,11 +7,11 @@ SPDX-License-Identifier: MIT
 
 # OpenTSLM: Time-Series Language Models for Reasoning over Multivariate Medical Text- and Time-Series Data
 [![PyPI - Version](https://img.shields.io/pypi/v/opentslm)](https://pypi.org/project/opentslm)
-[![DOI](https://img.shields.io/badge/DOI-10.13140/RG.2.2.14827.60963-blue.svg)](https://doi.org/10.13140/RG.2.2.14827.60963)
+[![DOI](https://img.shields.io/badge/DOI-10.48550/arXiv.2510.02410-blue.svg)](https://doi.org/10.48550/arXiv.2510.02410)
 [![Static Analysis](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml)
 
 
-Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length [...] **[🔗 Read the full paper](https://doi.org/10.13140/RG.2.2.14827.60963)**  
+Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length [...] **[🔗 Read the full paper](https://doi.org/10.48550/arXiv.2510.02410)**  
 
 <p align="center">
    <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/schematic_overview_3.png" alt="Schematic Overview" width="100%">
@@ -329,6 +329,7 @@ This work was made possible through the collaborative efforts of an interdiscipl
 - Winnie Chow (Stanford University)
 - Martin Maritsch (Amazon)
 - Robert Jakob (ETH Zurich, ETH Agentic Systems Lab)
+- Ning Wang (ETH Zurich, ETH Agentic Systems Lab)
 - Aradhana Verma (Stanford University)
 - Brian Han (Stanford University)
 - Daniel Seung Kim (University of Washington)
