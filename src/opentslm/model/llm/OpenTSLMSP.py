@@ -5,7 +5,7 @@
 
 import torch
 import torch.nn as nn
-from typing import List, Dict, Tuple, Optional
+from typing import Any, List, Dict, Tuple, Optional
 from jaxtyping import Float, Int
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.nn.utils.rnn import pad_sequence
@@ -178,7 +178,7 @@ class OpenTSLMSP(TimeSeriesLLM):
 
     def pad_and_apply_batch(
         self,
-        batch: List[Dict[str, any]],
+        batch: List[Dict[str, Any]],
     ) -> Tuple[
         Float[torch.Tensor, "batch seq_len llm_dim"],
         Int[torch.Tensor, "batch seq_len"],
@@ -320,7 +320,7 @@ class OpenTSLMSP(TimeSeriesLLM):
         return inputs_embeds, attention_mask
 
     def generate(
-        self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
+        self, batch: List[Dict[str, Any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
         inputs_embeds, attention_mask = self.pad_and_apply_batch(batch)
         gen_ids = self.llm.generate(
@@ -331,7 +331,7 @@ class OpenTSLMSP(TimeSeriesLLM):
         )
         return self.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
 
-    def compute_loss(self, batch: List[Dict[str, any]]) -> Float[torch.Tensor, ""]:
+    def compute_loss(self, batch: List[Dict[str, Any]]) -> Float[torch.Tensor, ""]:
         """
         batch: same format as generate()
         answers: List[str] of length B

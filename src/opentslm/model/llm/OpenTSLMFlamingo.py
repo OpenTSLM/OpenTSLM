@@ -12,7 +12,7 @@ from open_flamingo.src.flamingo_lm import FlamingoLMMixin
 from open_flamingo.src.utils import extend_instance
 import torch
 import torch._dynamo
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 from jaxtyping import Float, Int
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -154,7 +154,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         self.text_tokenizer = text_tokenizer
 
     def pad_and_apply_batch(
-        self, batch: List[Dict[str, any]], include_labels: bool
+        self, batch: List[Dict[str, Any]], include_labels: bool
     ) -> Tuple[
         Int[torch.Tensor, "batch seq_len"],
         Float[torch.Tensor, "batch n_series 1 length"],
@@ -257,7 +257,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         return input_ids, images, attention_mask, labels
 
     def generate(
-        self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
+        self, batch: List[Dict[str, Any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
         # Temporarily disable compilation to avoid data-dependent operation issues
         original_disable = torch._dynamo.config.disable
@@ -289,7 +289,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             # Restore original compilation setting
             torch._dynamo.config.disable = original_disable
 
-    def compute_loss(self, batch: List[Dict[str, any]]) -> Float[torch.Tensor, ""]:
+    def compute_loss(self, batch: List[Dict[str, Any]]) -> Float[torch.Tensor, ""]:
         """
         batch: same format as generate()
         answers: List[str] of length B
