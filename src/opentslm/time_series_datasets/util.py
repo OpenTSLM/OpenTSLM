@@ -4,23 +4,32 @@
 # SPDX-License-Identifier: MIT
 
 import math
-from typing import List
+from typing import Any, Dict, List
 from opentslm.model_config import PATCH_SIZE
 
 import torch.nn.functional as F
 
 import torch
+from jaxtyping import Float
 
 MAX_VALUE = 50_000
 MIN_VALUE = -MAX_VALUE
 
+# Shape of each element's "time_series" after collation: all of a sample's
+# series stacked and zero-padded to a common length that is a multiple of
+# the patch size.
+PaddedTimeSeries = Float[torch.Tensor, "n_series padded_len"]
+
 
 def extend_time_series_to_match_patch_size_and_aggregate(
-    batch, *, patch_size: int = PATCH_SIZE, normalize: bool = False
-):
+    batch: List[Dict[str, Any]], *, patch_size: int = PATCH_SIZE, normalize: bool = False
+) -> List[Dict[str, Any]]:
     """
     Pad variable-length series so each sample length is a multiple of *patch_size*.
     Optionally normalize each time series to have zero mean and unit variance.
+
+    Each element's ``"time_series"`` entry (a list of 1D array-likes) is replaced
+    by a single ``PaddedTimeSeries`` tensor of shape [n_series, padded_len].
     """
 
     for element in batch:
