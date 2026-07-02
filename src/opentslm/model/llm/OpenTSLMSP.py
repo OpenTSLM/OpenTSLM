@@ -6,6 +6,7 @@
 import torch
 import torch.nn as nn
 from typing import List, Dict, Tuple, Optional
+from jaxtyping import Float, Int
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.nn.utils.rnn import pad_sequence
 
@@ -178,7 +179,10 @@ class OpenTSLMSP(TimeSeriesLLM):
     def pad_and_apply_batch(
         self,
         batch: List[Dict[str, any]],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[
+        Float[torch.Tensor, "batch seq_len llm_dim"],
+        Int[torch.Tensor, "batch seq_len"],
+    ]:
         """
         TL;DR:
             This function is probably the most crucial part of OpenTSLM-SP, and also the hardest to understand.
@@ -327,7 +331,7 @@ class OpenTSLMSP(TimeSeriesLLM):
         )
         return self.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
 
-    def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
+    def compute_loss(self, batch: List[Dict[str, any]]) -> Float[torch.Tensor, ""]:
         """
         batch: same format as generate()
         answers: List[str] of length B
