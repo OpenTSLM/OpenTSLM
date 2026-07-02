@@ -6,6 +6,7 @@
 from .prompt import Prompt
 import numpy as np
 from collections.abc import Sequence
+from jaxtyping import Num
 
 
 class TextTimeSeriesPrompt(Prompt):
@@ -39,5 +40,5 @@ class TextTimeSeriesPrompt(Prompt):
     def get_text(self) -> str:
         return self.__text
 
-    def get_time_series(self) -> np.ndarray:
+    def get_time_series(self) -> Num[np.ndarray, " length"]:
         return self.__time_series
