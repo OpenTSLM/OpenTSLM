@@ -5,6 +5,7 @@
 
 import torch
 import torch.nn as nn
+from jaxtyping import Float
 
 
 from opentslm.model_config import TRANSFORMER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
@@ -51,7 +52,9 @@ class CNNTokenizer(TimeSeriesEncoderBase):
         self.input_norm = nn.LayerNorm(transformer_input_dim)
         self.input_dropout = nn.Dropout(self.dropout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: Float[torch.Tensor, "batch length"]
+    ) -> Float[torch.Tensor, "batch patches embed_dim"]:
         """
         Args:
             x: FloatTensor of shape [B, L], a batch of raw time series.
