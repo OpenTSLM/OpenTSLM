@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 
 import torch
 import torch.nn as nn
+from jaxtyping import Float
 
 from opentslm.prompt.full_prompt import FullPrompt
 
@@ -25,7 +26,7 @@ class TimeSeriesLLM(nn.Module):
         
         raise NotImplementedError("Generate method should be implemented by the subclass")
 
-    def compute_loss(self, batch: List[Dict[str, Any]]) -> torch.Tensor:
+    def compute_loss(self, batch: List[Dict[str, Any]]) -> Float[torch.Tensor, ""]:
         """
         batch: same format as generate()
         answers: List[str] of length B
