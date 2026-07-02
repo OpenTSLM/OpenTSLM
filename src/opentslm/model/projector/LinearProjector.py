@@ -3,7 +3,9 @@
 #
 # SPDX-License-Identifier: MIT
 
+import torch
 import torch.nn as nn
+from jaxtyping import Float
 
 
 class LinearProjector(nn.Module):
@@ -11,5 +13,7 @@ class LinearProjector(nn.Module):
         super().__init__()
         self.projector = nn.Linear(input_dim, output_dim).to(device)
 
-    def forward(self, x):
+    def forward(
+        self, x: Float[torch.Tensor, "*batch patches encoder_dim"]
+    ) -> Float[torch.Tensor, "*batch patches llm_dim"]:
         return self.projector(x)
