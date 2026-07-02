@@ -12,7 +12,8 @@ from open_flamingo.src.flamingo_lm import FlamingoLMMixin
 from open_flamingo.src.utils import extend_instance
 import torch
 import torch._dynamo
-from typing import List, Dict, Tuple
+from typing import List, Dict, Optional, Tuple
+from jaxtyping import Float, Int
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from opentslm.model_config import ENCODER_OUTPUT_DIM
@@ -154,8 +155,15 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
 
     def pad_and_apply_batch(
         self, batch: List[Dict[str, any]], include_labels: bool
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        def pad_time_series(batch, max_length=None):
+    ) -> Tuple[
+        Int[torch.Tensor, "batch seq_len"],
+        Float[torch.Tensor, "batch 1 n_series length"],
+        Int[torch.Tensor, "batch seq_len"],
+        Optional[Int[torch.Tensor, "batch seq_len"]],
+    ]:
+        def pad_time_series(
+            batch, max_length=None
+        ) -> Float[torch.Tensor, "batch n_series length"]:
             """Pad time series to the same length (either max in batch or specified max)"""
             time_series = [item["time_series"] for item in batch]
 
@@ -276,7 +284,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             # Restore original compilation setting
             torch._dynamo.config.disable = original_disable
 
-    def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
+    def compute_loss(self, batch: List[Dict[str, any]]) -> Float[torch.Tensor, ""]:
         """
         batch: same format as generate()
         answers: List[str] of length B
