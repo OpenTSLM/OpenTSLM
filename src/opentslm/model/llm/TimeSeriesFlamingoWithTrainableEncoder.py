@@ -5,6 +5,7 @@
 
 import torch
 from torch import nn
+from jaxtyping import Float
 from open_flamingo import Flamingo
 from einops import rearrange
 
@@ -25,7 +26,11 @@ class TimeSeriesFlamingoWithTrainableEncoder(Flamingo):
     # Override the _encode_vision_x method to handle time series data
     # In the original Flamingo, the vision_encoder is a CLIPModel, which is not trainable (with torch.no_grad())
     # Here, we use a TimeSeriesCNNEncoder, which is trainable
-    def _encode_vision_x(self, vision_x):
+    def _encode_vision_x(
+        self,
+        vision_x: Float[torch.Tensor, "batch t_media n_frames length"]
+        | Float[torch.Tensor, "batch t_media n_frames channels height width"],
+    ) -> None:
         # Handle time series data while still using the TimeSeriesCNNEncoder
         if vision_x.ndim == 4:  # For shape (b, T_img, F, features)
             b, T, F, features = vision_x.shape
