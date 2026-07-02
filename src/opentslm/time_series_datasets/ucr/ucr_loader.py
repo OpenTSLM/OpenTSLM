@@ -10,6 +10,7 @@ from typing import Literal, Optional
 
 import pandas as pd
 import torch
+from jaxtyping import Float, Int
 from torch.utils.data import Dataset, DataLoader
 
 # from constants import RAW_DATA_PATH
@@ -120,7 +121,7 @@ class UCRDataset(Dataset):
     def __len__(self):
         return len(self.df)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> tuple[Float[torch.Tensor, " length"], int]:
         row    = self.df.iloc[idx]
         feats  = row[self.feature_cols].astype(float).values
         tensor = torch.tensor(feats, dtype=torch.float32)
@@ -129,7 +130,9 @@ class UCRDataset(Dataset):
         label  = int(row[self.label_col])
         return tensor, label
 
-def collate_fn(batch):
+def collate_fn(
+    batch: list[tuple[Float[torch.Tensor, " length"], int]],
+) -> tuple[Float[torch.Tensor, "batch length"], Int[torch.Tensor, " batch"]]:
     """
     Stack into:
       - features: FloatTensor (batch_size, series_length)
