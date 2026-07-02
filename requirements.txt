@@ -17,4 +17,5 @@ requests>=2.32.5
 einops>=0.8.1
 wfdb>=4.3.0
 open-flamingo>=0.0.2
+jaxtyping>=0.2.20
 -e .

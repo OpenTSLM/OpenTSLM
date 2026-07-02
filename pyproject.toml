@@ -55,6 +55,7 @@ dependencies = [
     "einops>=0.6",
     "wfdb>=4.0",
     "open-flamingo>=0.0.2",
+    "jaxtyping>=0.2.20",
 ]
 
 [project.urls]
