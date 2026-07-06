@@ -65,6 +65,7 @@ Repository = "https://github.com/StanfordBDHG/OpenTSLM"
 
 [dependency-groups]
 dev = [
+    "beartype>=0.22.9",
     "reuse>=6.2.0",
     "ruff>=0.14.0",
 ]
