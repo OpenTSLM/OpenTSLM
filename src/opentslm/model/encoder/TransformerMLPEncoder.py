@@ -34,7 +34,8 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
             dropout: dropout probability
             max_patches: maximum number of patches expected per sequence (for pos emb)
         """
-        super().__init__(input_dim, output_dim, dropout)
+        super().__init__(output_dim, dropout)
+        self.input_dim = input_dim
         self.patch_size = patch_size
 
         if input_dim % patch_size != 0:
