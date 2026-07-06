@@ -102,3 +102,9 @@ members = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+
+[tool.ruff.lint]
+# jaxtyping shape annotations like Float[Tensor, "batch length"] use string
+# literals inside the subscript, which pyflakes misreads as malformed forward
+# references (F722). This is the standard jaxtyping + ruff configuration.
+ignore = ["F722"]
