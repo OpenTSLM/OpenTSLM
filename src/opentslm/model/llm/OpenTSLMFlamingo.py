@@ -157,7 +157,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         self, batch: List[Dict[str, any]], include_labels: bool
     ) -> Tuple[
         Int[torch.Tensor, "batch seq_len"],
-        Float[torch.Tensor, "batch 1 n_series length"],
+        Float[torch.Tensor, "batch n_series 1 length"],
         Int[torch.Tensor, "batch seq_len"],
         Optional[Int[torch.Tensor, "batch seq_len"]],
     ]:
@@ -198,11 +198,16 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             "input_ids"
         ][-1]
 
-        # Process time series data
+        # Process time series data -> [B, n_series, length]
         images = pad_time_series(batch).to(
             self.device, dtype=cast_dtype, non_blocking=True
         )
-        images = images.unsqueeze(1)  # Add time dimension
+        # Flamingo expects vision input of shape [B, T_media, F_frames, ...].
+        # Each series must be its own media chunk (T_media == n_series) rather
+        # than separate frames of a single chunk, because Flamingo's masked
+        # cross-attention aligns each text token with the media chunk whose
+        # index equals the running count of preceding <image> tokens.
+        images = images.unsqueeze(2)
 
         # Process text inputs WITH answers
         text_inputs = []
