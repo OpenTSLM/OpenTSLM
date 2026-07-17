@@ -394,4 +394,10 @@ reuse annotate --recursive \
         <source media="(prefers-color-scheme: light)" srcset="assets/asl-logo-light.svg">
         <img src="assets/asl-logo-light.svg" alt="ETH Zurich Agentic Systems Lab" width="32%" align="middle"></picture></a>
   </p>
+   <a
+  href="https://forms.gle/hgv3JmyhFFYH1qCz7"
+  target="_blank"
+  rel="noopener noreferrer"
+  style="display:inline-flex;align-items:center;justify-content:center;min-width:112px;height:48px;padding:0 24px;border:1px solid rgba(255,255,255,.7);border-radius:12px;background:#fff;color:#000;font:500 15px/1 system-ui,sans-serif;text-decoration:none;box-shadow:0 14px 34px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.9);"
+>Join Us</a>
 </div>
