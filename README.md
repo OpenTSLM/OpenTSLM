@@ -388,10 +388,11 @@ reuse annotate --recursive \
     <a href="https://schmiedmayerlab.stanford.edu/" aria-label="Schmiedmayer Lab at Stanford University"><picture>
         <source media="(prefers-color-scheme: dark)" srcset="assets/schmiedmayer-lab-logo-dark.png">
         <source media="(prefers-color-scheme: light)" srcset="assets/schmiedmayer-lab-logo-light.png">
-        <img src="assets/schmiedmayer-lab-logo-light.png" alt="Stanford University and Stanford Medicine" width="58%" align="middle"></picture></a>
+        <img src="assets/schmiedmayer-lab-logo-light.png" alt="Stanford University and Stanford Medicine" width="42%" align="middle"></picture></a>
+    &nbsp;&nbsp;
     <a href="https://www.agenticsystemslab.org/" aria-label="Agentic Systems Lab at ETH Zurich"><picture>
         <source media="(prefers-color-scheme: dark)" srcset="assets/asl-logo-dark.svg">
-        <source media="(prefers-color-scheme: light)" srcset="assets/asl-logo-light.svg">
-        <img src="assets/asl-logo-light.svg" alt="ETH Zurich Agentic Systems Lab" width="32%" align="middle"></picture></a>
+        <source media="(prefers-color-scheme: light)" srcset="assets/asl-logo-light.png">
+        <img src="assets/asl-logo-light.png" alt="ETH Zurich and the Agentic Systems Lab" width="51%" align="middle"></picture></a>
   </p>
 </div>
