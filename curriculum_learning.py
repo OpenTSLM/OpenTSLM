@@ -10,6 +10,8 @@ import json
 import os as _os
 import argparse
 from typing import List, Optional, Dict, Any, Callable
+import wandb
+from dotenv import load_dotenv
 from opentslm.time_series_datasets.TSQADataset import TSQADataset
 from opentslm.time_series_datasets.m4.M4QADataset import M4QADataset
 from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
@@ -43,6 +45,7 @@ from opentslm.model.llm.OpenTSLMSP import OpenTSLMSP
 from opentslm.model.projector.MLPProjector import MLPProjector
 import datetime
 from opentslm.logger import get_logger, set_global_verbose
+from opentslm.logging.wandb_helper import WandbHelper
 
 from opentslm.model_config import (
     BATCH_SIZE,
@@ -66,6 +69,7 @@ CURRICULUM_STAGES = [
     "stage5_ecg_cot",
 ]
 
+load_dotenv()
 
 class CurriculumTrainer:
     """
@@ -110,6 +114,9 @@ class CurriculumTrainer:
         dist_backend: str = "nccl",
         local_rank: int = int(os.environ.get("LOCAL_RANK", 0)),
         llm_id: str = None,
+        encoder_type: str = "chronos2",
+        wandb_project: str = "opentslm-curriculum",
+        disable_wandb: bool = False,
     ):
         """
         Initialize the curriculum trainer.
@@ -130,7 +137,11 @@ class CurriculumTrainer:
                 "🚨 Warning: Using MPS, might not be fully compatible with the model. Use CUDA for best results."
             )
         self.llm_id = llm_id
+        self.encoder_type = encoder_type
         self.llm_id_safe = self._sanitize_llm_id(llm_id)
+        
+        # Generate training timestamp (precision to minute)
+        # self.train_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
         # Distributed training parameters
         self.gradient_checkpointing = gradient_checkpointing
@@ -145,7 +156,36 @@ class CurriculumTrainer:
             self._init_distributed()
 
         self.model = self._initialize_model()
-        self.results_dir = os.path.join("results", self.llm_id_safe, self.model_type)
+
+        # Wandb configuration
+        self.wandb_project = wandb_project
+        self.disable_wandb = disable_wandb
+        self.wandb_helper = WandbHelper(
+            model_type=self.model_type,
+            llm_id=self.llm_id,
+            llm_id_safe=self.llm_id_safe,
+            encoder_type=self.encoder_type,
+            device=self.device,
+            world_size=self.world_size,
+            rank=self.rank,
+            gradient_checkpointing=self.gradient_checkpointing,
+            wandb_project=self.wandb_project,
+            disabled=self.disable_wandb,
+        )
+
+        self.base_dir = os.getcwd()
+        
+        # Build results directory path
+        # For OpenTSLMFlamingo, include encoder_type and training timestamp in the path
+        if self.model_type == "OpenTSLMFlamingo":
+            self.results_dir = os.path.join(
+                self.base_dir, "results", self.llm_id_safe, self.model_type, self.encoder_type
+            )
+        else:
+            # For OpenTSLMSP, encoder_type is not applicable
+            self.results_dir = os.path.join(
+                self.base_dir, "results", self.llm_id_safe, self.model_type
+            )
         self._create_results_dir()
 
     def _get_device(self) -> str:
@@ -156,6 +196,42 @@ class CurriculumTrainer:
             return "mps"
         else:
             return "cpu"
+
+    def _init_wandb(self, stage_name: str = None, resume: bool = False):
+        """Initialize wandb for tracking experiments."""
+        if self.disable_wandb or (dist.is_initialized() and self.rank != 0):
+            return
+        self.wandb_helper.init_wandb(stage_name=stage_name, resume=resume)
+
+    def _log_wandb_metrics(self, metrics: Dict[str, Any], step: int = None, prefix: str = ""):
+        """Log metrics to wandb."""
+        if self.disable_wandb:
+            return
+        try:
+            self.wandb_helper.log_metrics(metrics=metrics, step=step, prefix=prefix)
+        except Exception as e:
+            if self.rank == 0:
+                print(f"⚠️  Failed to log metrics to wandb: {e}")
+
+    def _log_model_info_to_wandb(self):
+        """Log model architecture and system information to wandb."""
+        if self.disable_wandb:
+            return
+        try:
+            self.wandb_helper.log_model_info(self._get_model())
+        except Exception as e:
+            if self.rank == 0:
+                print(f"⚠️  Failed to log model info to wandb: {e}")
+
+    def _finish_wandb(self):
+        """Finish wandb run."""
+        if self.disable_wandb:
+            return
+        try:
+            self.wandb_helper.finish()
+        except Exception as e:
+            if self.rank == 0:
+                print(f"⚠️  Failed to finish wandb run: {e}")
 
     def _initialize_model(self):
         """Initialize the specified model type."""
@@ -168,6 +244,7 @@ class CurriculumTrainer:
                 gradient_checkpointing=self.gradient_checkpointing,
                 llm_id=self.llm_id,
                 device=self.device,
+                encoder_type=self.encoder_type,
             ).to(self.device)
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
@@ -856,6 +933,9 @@ class CurriculumTrainer:
                     print(f"   {metric}: {value:.4f}")
                 else:
                     print(f"   {metric}: {value}")
+            
+            # Log evaluation metrics to wandb
+            self._log_wandb_metrics(metrics, step=epoch, prefix="evaluation")
 
         # Signal other ranks that evaluation is complete
         if dist.is_initialized():
@@ -919,6 +999,12 @@ class CurriculumTrainer:
             if self.world_size > 1:
                 print(f"   Effective batch size: {batch_size * self.world_size}")
             print()
+
+        # Initialize wandb for this stage (force a fresh run per stage)
+        self._init_wandb(stage_name=stage_name, resume=False)
+        
+        # Log model and system information
+        self._log_model_info_to_wandb()
 
         # Check if checkpoint exists when in eval_only mode
         if eval_only and not self._checkpoint_exists(stage_name):
@@ -987,6 +1073,33 @@ class CurriculumTrainer:
 
         # Initialize optimizer and scheduler
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
+        
+        # Update wandb config with learning rates after optimizer is created
+        if self.wandb_helper.initialized and not self.disable_wandb:
+            try:
+                lr_config = {}
+                if self.model_type == "OpenTSLMSP":
+                    # Extract learning rates from optimizer param_groups
+                    param_groups = optimizer.param_groups
+                    if len(param_groups) > 0:
+                        lr_config["lr_encoder"] = param_groups[0]["lr"]
+                    if len(param_groups) > 1:
+                        lr_config["lr_projector"] = param_groups[1]["lr"]
+                    if len(param_groups) > 2:
+                        lr_config["lr_lora"] = param_groups[2]["lr"]
+                else:
+                    # For Flamingo, use base_lr
+                    if len(optimizer.param_groups) > 0:
+                        lr_config["lr_base"] = optimizer.param_groups[0]["lr"]
+                
+                # Also add batch size and other training config
+                lr_config["batch_size"] = batch_size
+                lr_config["num_epochs"] = num_epochs
+                
+                self.wandb_helper.update_config(lr_config)
+            except Exception as e:
+                if self.rank == 0:
+                    print(f"⚠️  Failed to update wandb config with learning rates: {e}")
 
         # Create data loaders
         if sampler is not None:
@@ -1131,6 +1244,13 @@ class CurriculumTrainer:
                 avg_train_loss = running_loss / len(train_loader)
                 if self.rank == 0:
                     tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
+                
+                # Log training metrics to wandb
+                self._log_wandb_metrics({
+                    "train_loss": avg_train_loss,
+                    "learning_rate": scheduler.get_last_lr()[0],
+                    "epoch": epoch
+                }, step=epoch, prefix="training")
 
                 # Validation
                 val_loss = 0.0
@@ -1154,6 +1274,13 @@ class CurriculumTrainer:
                 if self.rank == 0:
                     tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
                     tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
+                
+                # Log validation metrics to wandb
+                self._log_wandb_metrics({
+                    "val_loss": avg_val_loss,
+                    "best_val_loss": best_val_loss,
+                    "epochs_no_improve": epochs_no_improve
+                }, step=epoch, prefix="validation")
 
                 # Save loss history for this epoch
                 self._save_loss_history(stage_name, epoch, avg_train_loss, avg_val_loss)
@@ -1226,6 +1353,9 @@ class CurriculumTrainer:
         metrics = self._evaluate_stage(
             stage_name, test_loader, stage_name, metric_func, best_epoch
         )
+
+        # Finish wandb run for this stage
+        self._finish_wandb()
 
         return metrics
 
@@ -1463,30 +1593,46 @@ class CurriculumTrainer:
         )
 
     def _init_distributed(self):
-        """Initialize distributed training."""
-        if "WORLD_SIZE" in os.environ:
-            self.world_size = int(os.environ["WORLD_SIZE"])
-        if "RANK" in os.environ:
-            self.rank = int(os.environ["RANK"])
-        elif "LOCAL_RANK" in os.environ:
-            self.rank = int(os.environ["LOCAL_RANK"])
-
+        """Initialize distributed training for multi-node multi-GPU.
+        
+        Supports both single-node and multi-node training via torchrun.
+        Environment variables are automatically set by torchrun:
+        - MASTER_ADDR, MASTER_PORT: for inter-node communication
+        - WORLD_SIZE: total number of processes across all nodes
+        - RANK: global rank of this process
+        - LOCAL_RANK: rank within this node (GPU index)
+        """
+        # Get local_rank from environment (set by torchrun)
+        # This is the GPU index within this node
+        if "LOCAL_RANK" in os.environ:
+            self.local_rank = int(os.environ["LOCAL_RANK"])
+        
         # Initialize process group
+        # torchrun sets MASTER_ADDR, MASTER_PORT, WORLD_SIZE, RANK automatically
+        # Using init_method="env://" reads these from environment
         dist.init_process_group(
             backend=self.dist_backend,
-            init_method=self.dist_url,
-            world_size=self.world_size,
-            rank=self.rank,
+            init_method=self.dist_url,  # defaults to "env://"
             timeout=datetime.timedelta(hours=999),
         )
 
-        # Set device for this process
+        # Get global rank and world_size from initialized process group
+        # This is the correct way to get these values for multi-node training
+        self.rank = dist.get_rank()
+        self.world_size = dist.get_world_size()
+
+        # Set CUDA device based on local_rank (GPU index within this node)
         if torch.cuda.is_available():
             torch.cuda.set_device(self.local_rank)
             self.device = torch.device("cuda", self.local_rank)
 
         if self.rank == 0:
-            print(f"Initialized distributed training with {self.world_size} GPUs")
+            print(f"Initialized distributed training:")
+            print(f"  - World size: {self.world_size} (total GPUs across all nodes)")
+            print(f"  - Global rank: {self.rank}")
+            print(f"  - Local rank: {self.local_rank}")
+            if "MASTER_ADDR" in os.environ:
+                print(f"  - Master: {os.environ.get('MASTER_ADDR')}:{os.environ.get('MASTER_PORT')}")
 
     def _is_stage_completed(self, stage: str) -> bool:
         """Check if a stage is completed by verifying both training and evaluation were successful."""
@@ -1658,6 +1804,13 @@ def main():
         default="meta-llama/Llama-3.2-1B",
         help="LLM model ID for OpenTSLMFlamingo (e.g., 'google/medgemma-2b', 'meta-llama/Llama-3.2-1B')",
     )
+    parser.add_argument(
+        "--encoder_type",
+        type=str,
+        choices=["cnn", "chronos2"],
+        default="chronos2",
+        help="Encoder type for OpenTSLMFlamingo: 'cnn' or 'chronos2'",
+    )
 
     # Distributed training arguments
     parser.add_argument(
@@ -1687,11 +1840,27 @@ def main():
         "--verbose", default=False, action="store_true", help="Enable verbose logging"
     )
 
+    # Wandb arguments
+    parser.add_argument(
+        "--wandb_project",
+        type=str,
+        default="opentslm-curriculum",
+        help="Weights & Biases project name",
+    )
+    parser.add_argument(
+        "--disable_wandb",
+        default=False,
+        action="store_true",
+        help="Disable wandb logging",
+    )
     args = parser.parse_args()
 
     # Set up global logging
     set_global_verbose(args.verbose)
     logger = get_logger(verbose=args.verbose)
+
+    if not args.disable_wandb and os.environ.get("WANDB_API_KEY"):
+        wandb.login(key=os.environ["WANDB_API_KEY"], relogin=True)
 
     # Initialize trainer
     trainer = CurriculumTrainer(
@@ -1702,6 +1871,9 @@ def main():
         dist_backend=args.dist_backend,
         local_rank=args.local_rank,
         llm_id=args.llm_id,
+        encoder_type=args.encoder_type,
+        wandb_project=args.wandb_project,
+        disable_wandb=args.disable_wandb,
     )
 
     # Run curriculum

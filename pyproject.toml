@@ -55,6 +55,7 @@ dependencies = [
     "einops>=0.6",
     "wfdb>=4.0",
     "open-flamingo>=0.0.2",
+    "chronos-forecasting>=2.2.0"
 ]
 
 [project.urls]
