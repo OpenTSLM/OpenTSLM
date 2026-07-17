@@ -344,7 +344,7 @@ This work was made possible through the collaborative efforts of an interdiscipl
 
 ## Contributing
 
-Contributions to this project are welcome. Please make sure to read the [contribution guidelines](https://github.com/OpenTSLM/.github/blob/main/CONTRIBUTING.md) and the [contributor covenant code of conduct](https://github.com/OpenTSLM/.github/blob/main/CODE_OF_CONDUCT.md) first.
+Contributions to this project are welcome. Please make sure to read the [contribution guidelines](https://github.com/SchmiedmayerLab/.github/blob/main/CONTRIBUTING.md) and the [contributor covenant code of conduct](https://github.com/SchmiedmayerLab/.github/blob/main/CODE_OF_CONDUCT.md) first.
 
 You can find a list of all current contributors at [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
