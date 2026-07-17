@@ -11,7 +11,7 @@ Loader utilities for the M4 time series dataset with captions.
 This module provides functions to load, merge, and split the processed M4 time series and caption data
 for use in machine learning tasks such as time series caption generation.
 
-Data source: https://github.com/StanfordBDHG/M4TimeSeriesCaptionDataset
+Data source: https://github.com/SchmiedmayerLab/M4TimeSeriesCaptionDataset
 Expected data location: data/M4TimeSeriesCaptionDataset/generated/
 """
 import os

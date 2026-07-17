@@ -59,8 +59,8 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://opentslm.com"
-Repository = "https://github.com/StanfordBDHG/OpenTSLM"
-"Bug Tracker" = "https://github.com/StanfordBDHG/OpenTSLM/issues"
+Repository = "https://github.com/OpenTSLM/OpenTSLM"
+"Bug Tracker" = "https://github.com/OpenTSLM/OpenTSLM/issues"
 
 [dependency-groups]
 dev = [

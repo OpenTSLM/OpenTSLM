@@ -20,11 +20,11 @@ concurrency:
 jobs:
   reuse_action:
     name: REUSE Compliance Check
-    uses: StanfordBDHG/.github/.github/workflows/reuse.yml@v2
+    uses: SchmiedmayerLab/.github/.github/workflows/reuse.yml@v0.2
     permissions:
       contents: read
   markdownlinkcheck:
     name: Markdown Link Check
-    uses: StanfordBDHG/.github/.github/workflows/markdown-link-check.yml@v2
+    uses: SchmiedmayerLab/.github/.github/workflows/markdown-links.yml@v0.2
     permissions:
       contents: read

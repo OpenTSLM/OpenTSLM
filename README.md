@@ -8,13 +8,13 @@ SPDX-License-Identifier: MIT
 # OpenTSLM: Time-Series Language Models for Reasoning over Multivariate Medical Text- and Time-Series Data
 [![PyPI - Version](https://img.shields.io/pypi/v/opentslm)](https://pypi.org/project/opentslm)
 [![DOI](https://img.shields.io/badge/DOI-10.48550/arXiv.2510.02410-blue.svg)](https://doi.org/10.48550/arXiv.2510.02410)
-[![Static Analysis](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml)
+[![Static Analysis](https://github.com/SchmiedmayerLab/OpenTSLM/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/SchmiedmayerLab/OpenTSLM/actions/workflows/static-analysis.yml)
 
 
 Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length [...] **[🔗 Read the full paper](https://doi.org/10.48550/arXiv.2510.02410)**  
 
 <p align="center">
-   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/schematic_overview_3.png" alt="Schematic Overview" width="100%">
+   <img src="https://raw.githubusercontent.com/OpenTSLM/OpenTSLM/main/assets/schematic_overview.png" alt="Schematic Overview" width="100%">
 </p>
 
 
@@ -23,9 +23,9 @@ Large Language Models (LLMs) have emerged as powerful tools for interpreting mul
 OpenTSLM models can reason over multiple time series of any length at once, generating findings, captions, and rationales in natural language. We tested these models across a wide range of tasks spanning Human Activity Recognition (HAR) from 3-axis acceleration data, sleep staging from EEG readings, 12-lead ECG question answering, and time series captioning. Some examples are shown below, more are available in the paper.
 
 <p align="center">
-   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/ecg_rationale.png" alt="ECG Rationale" width="32%">
-   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/har_rationale.png" alt="HAR Rationale" width="32%">
-      <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/m4_caption.png" alt="M4 Caption" width="34%">
+   <img src="https://raw.githubusercontent.com/OpenTSLM/OpenTSLM/main/assets/ecg_rationale.png" alt="ECG Rationale" width="32%">
+   <img src="https://raw.githubusercontent.com/OpenTSLM/OpenTSLM/main/assets/har_rationale.png" alt="HAR Rationale" width="32%">
+      <img src="https://raw.githubusercontent.com/OpenTSLM/OpenTSLM/main/assets/m4_caption.png" alt="M4 Caption" width="34%">
 
 </p>
 
@@ -116,7 +116,7 @@ for i, batch in enumerate(test_loader):
 To run the demos and use finetuning scripts **clone the repository** and set up all dependencies. We recommend using [uv](https://docs.astral.sh/uv/) to set up the environment, but you can also use pip:
 
 ```bash
-git clone https://github.com/StanfordBDHG/OpenTSLM.git
+git clone https://github.com/OpenTSLM/OpenTSLM.git
 
 
 # uv environment management (recommended). Installs uv if it does not exist and creates the virtual environment
@@ -344,7 +344,7 @@ This work was made possible through the collaborative efforts of an interdiscipl
 
 ## Contributing
 
-Contributions to this project are welcome. Please make sure to read the [contribution guidelines](https://github.com/StanfordBDHG/.github/blob/main/CONTRIBUTING.md) and the [contributor covenant code of conduct](https://github.com/StanfordBDHG/.github/blob/main/CODE_OF_CONDUCT.md) first.
+Contributions to this project are welcome. Please make sure to read the [contribution guidelines](https://github.com/OpenTSLM/.github/blob/main/CONTRIBUTING.md) and the [contributor covenant code of conduct](https://github.com/OpenTSLM/.github/blob/main/CODE_OF_CONDUCT.md) first.
 
 You can find a list of all current contributors at [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
@@ -376,10 +376,22 @@ reuse annotate --recursive \
 ```
 
 
+---
 
-<div align="left">
-   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="90">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/CDHI_white.svg" alt="ETH Centre for Digital Health Interventions" height="90">
-      <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/ASLwhite.svg" alt="ETH Agentic Systems Lab" height="90">
-
+<div align="center">
+  <h3>Developed in collaboration</h3>
+  <p>
+    OpenTSLM is a collaboration between the Schmiedmayer Lab at Stanford University<br>
+    and the Agentic Systems Lab at ETH Zurich.
+  </p>
+  <p>
+    <a href="https://schmiedmayerlab.stanford.edu/" aria-label="Schmiedmayer Lab at Stanford University"><picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/schmiedmayer-lab-logo-dark.png">
+        <source media="(prefers-color-scheme: light)" srcset="assets/schmiedmayer-lab-logo-light.png">
+        <img src="assets/schmiedmayer-lab-logo-light.png" alt="Stanford University and Stanford Medicine" width="58%" align="middle"></picture></a>
+    <a href="https://www.agenticsystemslab.org/" aria-label="Agentic Systems Lab at ETH Zurich"><picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/asl-logo-dark.svg">
+        <source media="(prefers-color-scheme: light)" srcset="assets/asl-logo-light.svg">
+        <img src="assets/asl-logo-light.svg" alt="ETH Zurich Agentic Systems Lab" width="32%" align="middle"></picture></a>
+  </p>
 </div>
