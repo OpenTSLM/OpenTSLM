@@ -14,7 +14,7 @@ SPDX-License-Identifier: MIT
 Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length [...] **[🔗 Read the full paper](https://doi.org/10.48550/arXiv.2510.02410)**  
 
 <p align="center">
-   <img src="https://raw.githubusercontent.com/OpenTSLM/OpenTSLM/main/assets/schematic_overview.png" alt="Schematic Overview" width="100%">
+   <img src="assets/schematic_overview.png" alt="Schematic Overview" width="100%">
 </p>
 
 
@@ -23,9 +23,9 @@ Large Language Models (LLMs) have emerged as powerful tools for interpreting mul
 OpenTSLM models can reason over multiple time series of any length at once, generating findings, captions, and rationales in natural language. We tested these models across a wide range of tasks spanning Human Activity Recognition (HAR) from 3-axis acceleration data, sleep staging from EEG readings, 12-lead ECG question answering, and time series captioning. Some examples are shown below, more are available in the paper.
 
 <p align="center">
-   <img src="https://raw.githubusercontent.com/OpenTSLM/OpenTSLM/main/assets/ecg_rationale.png" alt="ECG Rationale" width="32%">
-   <img src="https://raw.githubusercontent.com/OpenTSLM/OpenTSLM/main/assets/har_rationale.png" alt="HAR Rationale" width="32%">
-      <img src="https://raw.githubusercontent.com/OpenTSLM/OpenTSLM/main/assets/m4_caption.png" alt="M4 Caption" width="34%">
+   <img src="assets/ecg_rationale.png" alt="ECG Rationale" width="32%">
+   <img src="assets/har_rationale.png" alt="HAR Rationale" width="32%">
+   <img src="assets/m4_caption.png" alt="M4 Caption" width="34%">
 
 </p>
 
