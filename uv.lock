@@ -2188,7 +2188,7 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1.0" },
     { name = "torch", specifier = ">=2.0" },
     { name = "tqdm", specifier = ">=4.62" },
-    { name = "transformers", specifier = ">=4.25" },
+    { name = "transformers", specifier = ">=4.46" },
     { name = "wfdb", specifier = ">=4.0" },
 ]
 

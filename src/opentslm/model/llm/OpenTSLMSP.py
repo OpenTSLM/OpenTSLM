@@ -4,9 +4,8 @@
 # SPDX-License-Identifier: MIT
 
 import torch
-import torch.nn as nn
-from typing import List, Dict, Tuple, Optional
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from typing import Any, Dict, Iterator, List, Optional, Tuple
+from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 from torch.nn.utils.rnn import pad_sequence
 
 try:
@@ -47,7 +46,11 @@ class OpenTSLMSP(TimeSeriesLLM):
             device_map={"": device},
             attn_implementation="eager",
         )
-        self.llm.resize_token_embeddings(len(self.tokenizer))
+        # Avoid Transformers' mean-based resize path, which can trip on meta tensors
+        # during low-memory model initialization in production worker environments.
+        self.llm.resize_token_embeddings(
+            len(self.tokenizer), mean_resizing=False
+        )
 
         # 3) encoder + projector (now internal)
         self.encoder = TransformerCNNEncoder().to(device)
@@ -133,7 +136,7 @@ class OpenTSLMSP(TimeSeriesLLM):
                 p.numel() for p in self.llm.parameters() if p.requires_grad
             )
             total_params = sum(p.numel() for p in self.llm.parameters())
-            print(f"✅ LoRA enabled:")
+            print("✅ LoRA enabled:")
             print(f"   LoRA parameters: {lora_params:,}")
             print(f"   Total trainable parameters: {trainable_params:,}")
             print(f"   Total parameters: {total_params:,}")
@@ -327,6 +330,29 @@ class OpenTSLMSP(TimeSeriesLLM):
         )
         return self.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
 
+    def stream_generate(
+        self, batch: List[Dict[str, Any]], max_new_tokens: int = 50, **generate_kwargs
+    ) -> Iterator[str]:
+        self._validate_streaming_batch(batch)
+
+        inputs_embeds, attention_mask = self.pad_and_apply_batch(batch)
+        streamer = TextIteratorStreamer(
+            self.tokenizer,
+            skip_prompt=True,
+            timeout=generate_kwargs.pop("stream_timeout", None),
+        )
+
+        def run_generation() -> None:
+            self.llm.generate(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                max_new_tokens=max_new_tokens,
+                streamer=streamer,
+                **generate_kwargs,
+            )
+
+        yield from self._iterate_streamer(streamer, run_generation)
+
     def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
         """
         batch: same format as generate()
@@ -415,13 +441,6 @@ class OpenTSLMSP(TimeSeriesLLM):
                 loaded_count = 0
                 missing_keys = []
 
-                # Track which LoRA parameters we expect to find
-                expected_lora_params = {
-                    name
-                    for name, param in self.llm.named_parameters()
-                    if param.requires_grad and "lora_" in name
-                }
-
                 for name, param in self.llm.named_parameters():
                     if name in lora_state and param.requires_grad and "lora_" in name:
                         param.data.copy_(lora_state[name])
@@ -504,3 +523,19 @@ class OpenTSLMSP(TimeSeriesLLM):
         )
         output = self.generate(batch, max_new_tokens=max_new_tokens)
         return output[0]
+
+    def stream_prompt(
+        self,
+        prompt: FullPrompt,
+        max_new_tokens: int = 30000,
+        normalize: bool = False,
+        **generate_kwargs,
+    ) -> Iterator[str]:
+        batch = [prompt.to_dict()]
+        self.eval()
+        batch = extend_time_series_to_match_patch_size_and_aggregate(
+            batch, normalize=normalize
+        )
+        yield from self.stream_generate(
+            batch, max_new_tokens=max_new_tokens, **generate_kwargs
+        )

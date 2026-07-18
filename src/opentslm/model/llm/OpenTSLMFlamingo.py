@@ -10,10 +10,11 @@ from opentslm.model.llm.TimeSeriesFlamingoWithTrainableEncoder import (
 )
 from open_flamingo.src.flamingo_lm import FlamingoLMMixin
 from open_flamingo.src.utils import extend_instance
+import random
 import torch
 import torch._dynamo
-from typing import List, Dict, Tuple
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from typing import Dict, Iterator, List, Tuple
+from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 
 from opentslm.model_config import ENCODER_OUTPUT_DIM
 from opentslm.model.llm.TimeSeriesLLM import TimeSeriesLLM
@@ -108,12 +109,16 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                     return __KNOWN_DECODER_LAYERS_ATTR_NAMES[k]
 
             raise ValueError(
-                f"We require the attribute name for the nn.ModuleList in the decoder storing the transformer block layers. Please supply this string manually."
+                "We require the attribute name for the nn.ModuleList in the decoder storing the transformer block layers. Please supply this string manually."
             )
 
         decoder_layers_attr_name = _infer_decoder_layers_attr_name(lang_encoder)
         lang_encoder.set_decoder_layers_attr_name(decoder_layers_attr_name)
-        lang_encoder.resize_token_embeddings(len(text_tokenizer))
+        # Avoid Transformers' mean-based resize path, which can trip on meta tensors
+        # during low-memory model initialization in production worker environments.
+        lang_encoder.resize_token_embeddings(
+            len(text_tokenizer), mean_resizing=False
+        )
 
         # Fix compatibility for Gemma3Config which has hidden_size in text_config
         if hasattr(lang_encoder.config, "text_config") and hasattr(
@@ -151,6 +156,39 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         self.model = model
         self.llm = model
         self.text_tokenizer = text_tokenizer
+
+    def _build_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
+        return self.model.lang_encoder.get_input_embeddings()(input_ids)
+
+    def _forward_with_embeddings(
+        self,
+        images: torch.Tensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        labels: torch.Tensor | None = None,
+    ):
+        inputs_embeds = self._build_input_embeddings(input_ids)
+        try:
+            self.model._encode_vision_x(vision_x=images)
+            self._condition_media_locations(input_ids)
+            return super(FlamingoLMMixin, self.model.lang_encoder).forward(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                labels=labels,
+            )
+        finally:
+            self.model.lang_encoder.clear_conditioned_layers()
+
+    def _condition_media_locations(self, input_ids: torch.Tensor):
+        media_locations = input_ids == self.model.media_token_id
+        attend_previous = (
+            (random.random() < 0.5)
+            if self.model.lang_encoder.use_media_placement_augmentation
+            else False
+        )
+        for layer in self.model.lang_encoder._get_decoder_layers():
+            layer.condition_media_locations(media_locations)
+            layer.condition_attend_previous(attend_previous)
 
     def pad_and_apply_batch(
         self, batch: List[Dict[str, any]], include_labels: bool
@@ -255,16 +293,20 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                 input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
                     batch, include_labels=True
                 )
-
-                gen_ids = self.llm.generate(
-                    vision_x=images,
-                    lang_x=input_ids,
-                    attention_mask=attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    eos_token_id=self.text_tokenizer.eos_token_id,
-                    pad_token_id=self.text_tokenizer.pad_token_id,
-                    **generate_kwargs,
-                )
+                inputs_embeds = self._build_input_embeddings(input_ids)
+                try:
+                    self.model._encode_vision_x(vision_x=images)
+                    self._condition_media_locations(input_ids)
+                    gen_ids = self.model.lang_encoder.generate(
+                        inputs_embeds=inputs_embeds,
+                        attention_mask=attention_mask,
+                        max_new_tokens=max_new_tokens,
+                        eos_token_id=self.text_tokenizer.eos_token_id,
+                        pad_token_id=self.text_tokenizer.pad_token_id,
+                        **generate_kwargs,
+                    )
+                finally:
+                    self.model.lang_encoder.clear_conditioned_layers()
 
                 # Remove input ids from generation
                 answer_only_ids = gen_ids[:, input_ids.shape[1] :]
@@ -276,6 +318,46 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             # Restore original compilation setting
             torch._dynamo.config.disable = original_disable
 
+    def stream_generate(
+        self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
+    ) -> Iterator[str]:
+        self._validate_streaming_batch(batch)
+
+        original_disable = torch._dynamo.config.disable
+        torch._dynamo.config.disable = True
+        try:
+            with torch.inference_mode():
+                input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
+                    batch, include_labels=True
+                )
+                inputs_embeds = self._build_input_embeddings(input_ids)
+                streamer = TextIteratorStreamer(
+                    self.text_tokenizer,
+                    skip_prompt=True,
+                    timeout=generate_kwargs.pop("stream_timeout", None),
+                )
+
+                def run_generation() -> None:
+                    with torch.inference_mode():
+                        try:
+                            self.model._encode_vision_x(vision_x=images)
+                            self._condition_media_locations(input_ids)
+                            self.model.lang_encoder.generate(
+                                inputs_embeds=inputs_embeds,
+                                attention_mask=attention_mask,
+                                max_new_tokens=max_new_tokens,
+                                eos_token_id=self.text_tokenizer.eos_token_id,
+                                pad_token_id=self.text_tokenizer.pad_token_id,
+                                streamer=streamer,
+                                **generate_kwargs,
+                            )
+                        finally:
+                            self.model.lang_encoder.clear_conditioned_layers()
+
+                yield from self._iterate_streamer(streamer, run_generation)
+        finally:
+            torch._dynamo.config.disable = original_disable
+
     def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
         """
         batch: same format as generate()
@@ -285,9 +367,9 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             batch, include_labels=False
         )
 
-        output = self.model(
-            vision_x=images,
-            lang_x=input_ids,
+        output = self._forward_with_embeddings(
+            images=images,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             labels=labels,
         )
@@ -333,13 +415,13 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         # Load state dict with strict=False to handle missing/unexpected keys
         missing_keys, unexpected_keys = self.load_state_dict(model_state, strict=False)
         if missing_keys:
-            print(f"⚠️  Warning: Missing keys when loading checkpoint:")
+            print("⚠️  Warning: Missing keys when loading checkpoint:")
             for key in missing_keys[:10]:
                 print(f"   - {key}")
             if len(missing_keys) > 10:
                 print(f"   ... and {len(missing_keys) - 10} more keys")
         if unexpected_keys:
-            print(f"⚠️  Warning: Unexpected keys when loading checkpoint:")
+            print("⚠️  Warning: Unexpected keys when loading checkpoint:")
             for key in unexpected_keys[:10]:
                 print(f"   - {key}")
             if len(unexpected_keys) > 10:
@@ -368,3 +450,19 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         finally:
             # Restore original compilation setting
             torch._dynamo.config.disable = original_disable
+
+    def stream_prompt(
+        self,
+        prompt: FullPrompt,
+        max_new_tokens: int = 1000,
+        normalize: bool = False,
+        **generate_kwargs,
+    ) -> Iterator[str]:
+        batch = [prompt.to_dict()]
+        self.eval()
+        batch = extend_time_series_to_match_patch_size_and_aggregate(
+            batch, normalize=normalize
+        )
+        yield from self.stream_generate(
+            batch, max_new_tokens=max_new_tokens, **generate_kwargs
+        )
