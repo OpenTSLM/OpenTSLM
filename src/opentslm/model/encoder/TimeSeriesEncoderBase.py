@@ -6,6 +6,7 @@
 from abc import abstractmethod
 import torch
 import torch.nn as nn
+from jaxtyping import Float
 
 from opentslm.model_config import ENCODER_OUTPUT_DIM
 
@@ -21,5 +22,7 @@ class TimeSeriesEncoderBase(nn.Module):
         self.dropout = dropout
 
     @abstractmethod
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: Float[torch.Tensor, "batch length"]
+    ) -> Float[torch.Tensor, "batch patches embed_dim"]:
         pass

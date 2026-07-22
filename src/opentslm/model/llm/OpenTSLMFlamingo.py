@@ -12,7 +12,8 @@ from open_flamingo.src.flamingo_lm import FlamingoLMMixin
 from open_flamingo.src.utils import extend_instance
 import torch
 import torch._dynamo
-from typing import List, Dict, Tuple
+from typing import Any, List, Dict, Optional, Tuple
+from jaxtyping import Float, Int
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from opentslm.model_config import ENCODER_OUTPUT_DIM
@@ -153,9 +154,16 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         self.text_tokenizer = text_tokenizer
 
     def pad_and_apply_batch(
-        self, batch: List[Dict[str, any]], include_labels: bool
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        def pad_time_series(batch, max_length=None):
+        self, batch: List[Dict[str, Any]], include_labels: bool
+    ) -> Tuple[
+        Int[torch.Tensor, "batch seq_len"],
+        Float[torch.Tensor, "batch n_series 1 length"],
+        Int[torch.Tensor, "batch seq_len"],
+        Optional[Int[torch.Tensor, "batch seq_len"]],
+    ]:
+        def pad_time_series(
+            batch, max_length=None
+        ) -> Float[torch.Tensor, "batch n_series length"]:
             """Pad time series to the same length (either max in batch or specified max)"""
             time_series = [item["time_series"] for item in batch]
 
@@ -190,11 +198,16 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             "input_ids"
         ][-1]
 
-        # Process time series data
+        # Process time series data -> [B, n_series, length]
         images = pad_time_series(batch).to(
             self.device, dtype=cast_dtype, non_blocking=True
         )
-        images = images.unsqueeze(1)  # Add time dimension
+        # Flamingo expects vision input of shape [B, T_media, F_frames, ...].
+        # Each series must be its own media chunk (T_media == n_series) rather
+        # than separate frames of a single chunk, because Flamingo's masked
+        # cross-attention aligns each text token with the media chunk whose
+        # index equals the running count of preceding <image> tokens.
+        images = images.unsqueeze(2)
 
         # Process text inputs WITH answers
         text_inputs = []
@@ -244,7 +257,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         return input_ids, images, attention_mask, labels
 
     def generate(
-        self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
+        self, batch: List[Dict[str, Any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
         # Temporarily disable compilation to avoid data-dependent operation issues
         original_disable = torch._dynamo.config.disable
@@ -276,7 +289,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             # Restore original compilation setting
             torch._dynamo.config.disable = original_disable
 
-    def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
+    def compute_loss(self, batch: List[Dict[str, Any]]) -> Float[torch.Tensor, ""]:
         """
         batch: same format as generate()
         answers: List[str] of length B

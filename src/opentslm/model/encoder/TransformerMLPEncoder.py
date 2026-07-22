@@ -5,6 +5,7 @@
 
 import torch
 import torch.nn as nn
+from jaxtyping import Float
 
 
 from opentslm.model_config import TRANSFORMER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
@@ -33,7 +34,8 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
             dropout: dropout probability
             max_patches: maximum number of patches expected per sequence (for pos emb)
         """
-        super().__init__(input_dim, output_dim, dropout)
+        super().__init__(output_dim, dropout)
+        self.input_dim = input_dim
         self.patch_size = patch_size
 
         if input_dim % patch_size != 0:
@@ -60,7 +62,9 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: Float[torch.Tensor, "batch length"]
+    ) -> Float[torch.Tensor, "batch patches embed_dim"]:
         """
         Args:
             x: FloatTensor of shape [B, L], a batch of raw time series.

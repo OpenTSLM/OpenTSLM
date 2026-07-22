@@ -110,6 +110,7 @@ class CurriculumTrainer:
         dist_backend: str = "nccl",
         local_rank: int = int(os.environ.get("LOCAL_RANK", 0)),
         llm_id: str = None,
+        smoke_test: bool = False,
     ):
         """
         Initialize the curriculum trainer.
@@ -131,6 +132,10 @@ class CurriculumTrainer:
             )
         self.llm_id = llm_id
         self.llm_id_safe = self._sanitize_llm_id(llm_id)
+
+        # Smoke-test mode: 1 epoch, 1 train batch, 1 val batch, 1 eval batch.
+        # Exercises the full pipeline end-to-end for testing without a real run.
+        self.smoke_test = smoke_test
 
         # Distributed training parameters
         self.gradient_checkpointing = gradient_checkpointing
@@ -784,6 +789,9 @@ class CurriculumTrainer:
                             os.fsync(results_fp.fileno())
                         except Exception:
                             pass
+
+                    if self.smoke_test:
+                        break
         finally:
             if results_fp is not None:
                 results_fp.close()
@@ -902,6 +910,11 @@ class CurriculumTrainer:
         # Use provided batch_size or default to global BATCH_SIZE
         if batch_size is None:
             batch_size = BATCH_SIZE
+
+        # Smoke-test mode caps the run to a single epoch; the train/val/eval
+        # loops below additionally stop after one batch each.
+        if self.smoke_test:
+            num_epochs = 1
 
         if self.rank == 0:
             print(f"\n🚀 Starting {stage_name} Training with {self.model_type}")
@@ -1090,6 +1103,7 @@ class CurriculumTrainer:
                 prog = tqdm(
                     train_loader,
                     desc=f"Epoch {epoch}/{num_epochs}",
+                    total=1 if self.smoke_test else None,
                     disable=self.rank != 0,
                 )
                 for i, batch in enumerate(prog):
@@ -1128,12 +1142,17 @@ class CurriculumTrainer:
                             lr=f"{scheduler.get_last_lr()[0]:.2e}",
                         )
 
-                avg_train_loss = running_loss / len(train_loader)
+                    if self.smoke_test:
+                        break
+
+                num_train_batches = i + 1
+                avg_train_loss = running_loss / num_train_batches
                 if self.rank == 0:
                     tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
 
                 # Validation
                 val_loss = 0.0
+                num_val_batches = 0
                 self.model.eval()
                 with torch.no_grad():
                     for batch in tqdm(
@@ -1142,8 +1161,11 @@ class CurriculumTrainer:
                         disable=self.rank != 0,
                     ):
                         val_loss += self._get_model().compute_loss(batch).item()
+                        num_val_batches += 1
+                        if self.smoke_test:
+                            break
 
-                avg_val_loss = val_loss / len(val_loader)
+                avg_val_loss = val_loss / num_val_batches
 
                 # Synchronize validation loss across all ranks
                 if dist.is_initialized():
@@ -1682,6 +1704,14 @@ def main():
         help="Local GPU rank",
     )
 
+    parser.add_argument(
+        "--smoke_test",
+        default=False,
+        action="store_true",
+        help="Fast smoke run: 1 epoch, 1 training batch, 1 validation batch, and 1 "
+        "evaluation batch, then done. Exercises the full pipeline end-to-end for testing.",
+    )
+
     # Logging arguments
     parser.add_argument(
         "--verbose", default=False, action="store_true", help="Enable verbose logging"
@@ -1702,6 +1732,7 @@ def main():
         dist_backend=args.dist_backend,
         local_rank=args.local_rank,
         llm_id=args.llm_id,
+        smoke_test=args.smoke_test,
     )
 
     # Run curriculum

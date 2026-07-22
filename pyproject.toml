@@ -55,6 +55,7 @@ dependencies = [
     "einops>=0.6",
     "wfdb>=4.0",
     "open-flamingo>=0.0.2",
+    "jaxtyping>=0.2.20",
 ]
 
 [project.urls]
@@ -64,6 +65,7 @@ Repository = "https://github.com/OpenTSLM/OpenTSLM"
 
 [dependency-groups]
 dev = [
+    "beartype>=0.22.9",
     "reuse>=6.2.0",
     "ruff>=0.14.0",
 ]
@@ -100,3 +102,9 @@ members = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+
+[tool.ruff.lint]
+# jaxtyping shape annotations like Float[Tensor, "batch length"] use string
+# literals inside the subscript, which pyflakes misreads as malformed forward
+# references (F722). This is the standard jaxtyping + ruff configuration.
+ignore = ["F722"]
