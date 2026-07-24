@@ -146,7 +146,18 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
             # TODO: investigate also training the output embeddings when untied
 
         # additonally unfreeze encoder
-        model.vision_encoder.requires_grad_(True)
+        # Ensure vision_encoder is a PyTorch module (not a SimpleNamespace)
+        if hasattr(model.vision_encoder, 'requires_grad_'):
+            model.vision_encoder.requires_grad_(True)
+        else:
+            # If vision_encoder is a SimpleNamespace, extract the actual encoder
+            if hasattr(model.vision_encoder, 'visual'):
+                model.vision_encoder = model.vision_encoder.visual
+                model.vision_encoder.requires_grad_(True)
+            else:
+                raise ValueError(
+                    f"vision_encoder is not a PyTorch module. Got type: {type(model.vision_encoder)}"
+                )
 
         self.model = model
         self.llm = model
@@ -261,8 +272,6 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
                     lang_x=input_ids,
                     attention_mask=attention_mask,
                     max_new_tokens=max_new_tokens,
-                    eos_token_id=self.text_tokenizer.eos_token_id,
-                    pad_token_id=self.text_tokenizer.pad_token_id,
                     **generate_kwargs,
                 )
 
