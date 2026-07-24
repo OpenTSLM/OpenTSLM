@@ -42,15 +42,17 @@ OpenTSLM is designed to work with Llama and Gemma models, with Llama 3.2 1B as t
 
 1. **Request Access (for Llama models)**  
     Visit the Llama model repository (e.g., https://huggingface.co/meta-llama/Llama-3.2-1B) or Gemma models repository (https://huggingface.co/google/gemma-3-270m) and request access from Meta.
+2. **Install Huggingface CLI**
 
-2. **Authenticate with Hugging Face**  
+    Installation instructions: https://huggingface.co/docs/huggingface_hub/en/guides/cli
+3. **Authenticate with Hugging Face**  
     Log in to your Hugging Face account and configure the CLI:
 
     ```bash
-    huggingface-cli login
+    hf auth login
     ```
 
-3. **Create an API Token**
+4. **Create an API Token**
     - Go to your Hugging Face settings: https://huggingface.co/settings/tokens
     - Generate a new token with `read` scope.
     - Copy the token for CLI login.
