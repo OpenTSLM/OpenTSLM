@@ -2,3 +2,7 @@
 # SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
+
+from .PhysicalTimeRoPETokenizer import PhysicalTimeRoPETokenizer
+
+__all__ = ["PhysicalTimeRoPETokenizer"]
